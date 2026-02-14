@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Champion Trainer - Horse Racing Game</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Main Menu Screen -->
+        <div id="main-menu" class="screen active">
+            <div class="menu-content">
+                <div class="logo">
+                    <span class="logo-icon">🏇</span>
+                    <h1>Champion Trainer</h1>
+                    <p class="tagline">Build your stable. Train your horses. Win the championship.</p>
+                </div>
+                <div class="menu-buttons">
+                    <button id="btn-new-game" class="btn btn-primary">New Career</button>
+                    <button id="btn-continue" class="btn btn-secondary" disabled>Continue</button>
+                    <button id="btn-how-to-play" class="btn btn-tertiary">How to Play</button>
+                </div>
+                <div class="menu-footer">
+                    <button id="btn-mute-menu" class="btn-mute" title="Toggle sound">🔊</button>
+                    <p>A horse racing management game</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- How to Play Screen -->
+        <div id="how-to-play" class="screen">
+            <div class="screen-content">
+                <h2>How to Play</h2>
+                <div class="instructions">
+                    <div class="instruction-card">
+                        <span class="instruction-icon">🏷️</span>
+                        <h3>1. Buy at Auction</h3>
+                        <p>Visit Tattersalls to browse horses. Set your maximum bid and compete against AI trainers.</p>
+                    </div>
+                    <div class="instruction-card">
+                        <span class="instruction-icon">🐴</span>
+                        <h3>2. Train Your Stable</h3>
+                        <p>Each horse has unique attributes. Focus training on speed, stamina, acceleration, or temperament.</p>
+                    </div>
+                    <div class="instruction-card">
+                        <span class="instruction-icon">🏁</span>
+                        <h3>3. Race to Win</h3>
+                        <p>Choose your race strategy, then make key decisions during the race. Your horse's attributes affect outcomes.</p>
+                    </div>
+                    <div class="instruction-card">
+                        <span class="instruction-icon">🏆</span>
+                        <h3>4. Become Champion</h3>
+                        <p>Earn points from race placements. End the season as Champion Trainer to prove your mastery.</p>
+                    </div>
+                </div>
+                <button id="btn-back-menu" class="btn btn-secondary">Back to Menu</button>
+            </div>
+        </div>
+
+        <!-- New Game Setup Screen -->
+        <div id="new-game-setup" class="screen">
+            <div class="screen-content">
+                <h2>Start Your Career</h2>
+                <div class="setup-form">
+                    <div class="form-group">
+                        <label for="trainer-name">Your Racing Stable Name</label>
+                        <input type="text" id="trainer-name" placeholder="e.g., Highfield Racing" maxlength="30">
+                    </div>
+                    <div class="form-group">
+                        <label>Stable Colours</label>
+                        <div id="silk-colour-picker" class="silk-colour-picker">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    <div class="difficulty-select">
+                        <label>Starting Budget</label>
+                        <div class="difficulty-options">
+                            <button class="difficulty-btn" data-budget="750000" data-difficulty="easy">
+                                <span class="budget-amount">£750,000</span>
+                                <span class="budget-label">Newcomer</span>
+                            </button>
+                            <button class="difficulty-btn selected" data-budget="500000" data-difficulty="medium">
+                                <span class="budget-amount">£500,000</span>
+                                <span class="budget-label">Standard</span>
+                            </button>
+                            <button class="difficulty-btn" data-budget="300000" data-difficulty="hard">
+                                <span class="budget-amount">£300,000</span>
+                                <span class="budget-label">Challenge</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="setup-buttons">
+                    <button id="btn-start-career" class="btn btn-primary">Begin Season 1</button>
+                    <button id="btn-back-from-setup" class="btn btn-tertiary">Back</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Screen (main game hub) -->
+        <div id="dashboard" class="screen">
+            <header class="game-header">
+                <div class="header-left">
+                    <span class="logo-small">🏇</span>
+                    <span id="display-stable-name" class="stable-name">Your Stable</span>
+                </div>
+                <div class="header-right">
+                    <span class="budget-display">£<span id="display-budget">500,000</span></span>
+                    <span class="season-display">Season <span id="display-season">1</span></span>
+                    <button id="btn-mute" class="btn-mute" title="Toggle sound">🔊</button>
+                </div>
+            </header>
+
+            <main class="dashboard-content">
+                <div class="dashboard-nav">
+                    <button class="nav-card" id="nav-auction">
+                        <span class="nav-icon">🏷️</span>
+                        <span class="nav-title">Tattersalls</span>
+                        <span class="nav-subtitle">Horse Auction</span>
+                    </button>
+                    <button class="nav-card" id="nav-stable">
+                        <span class="nav-icon">🐴</span>
+                        <span class="nav-title">My Stable</span>
+                        <span class="nav-subtitle"><span id="horse-count">0</span> horses</span>
+                    </button>
+                    <button class="nav-card" id="nav-races">
+                        <span class="nav-icon">🏁</span>
+                        <span class="nav-title">Races</span>
+                        <span class="nav-subtitle">Next: <span id="next-race">Available</span></span>
+                    </button>
+                    <button class="nav-card" id="nav-yearling-sale">
+                        <span class="nav-icon">🐴</span>
+                        <span class="nav-title">Yearling Sale</span>
+                        <span class="nav-subtitle">Young Prospects</span>
+                    </button>
+                    <button class="nav-card" id="nav-gallops">
+                        <span class="nav-icon">🏇</span>
+                        <span class="nav-title">Gallops</span>
+                        <span class="nav-subtitle">Yearling Training</span>
+                    </button>
+                </div>
+
+                <div class="dashboard-panels">
+                    <div class="panel standings-panel">
+                        <h3>Season Standings</h3>
+                        <div id="standings-list" class="standings-list">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                    <div class="panel next-race-panel">
+                        <h3>Next Race</h3>
+                        <div id="next-race-info" class="next-race-info">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <footer class="dashboard-footer">
+                <button id="btn-save-game" class="btn btn-small">Save Game</button>
+                <button id="btn-main-menu" class="btn btn-small btn-tertiary">Main Menu</button>
+            </footer>
+        </div>
+
+        <!-- Auction Screen -->
+        <div id="auction" class="screen">
+            <header class="game-header">
+                <div class="header-left">
+                    <button id="btn-back-dashboard" class="btn-icon">← Back</button>
+                    <span class="page-title">Tattersalls Horse Auction</span>
+                </div>
+                <div class="header-right">
+                    <span class="budget-display">£<span id="auction-budget">500,000</span></span>
+                </div>
+            </header>
+
+            <!-- Catalogue View -->
+            <div id="auction-catalogue" class="auction-section">
+                <div class="auction-intro">
+                    <h2>Today's Sale</h2>
+                    <p>Browse the catalogue and set your maximum bid for each horse you're interested in. The auction will run through all lots in sequence.</p>
+                </div>
+                <div id="horse-catalogue" class="horse-catalogue">
+                    <!-- Horse cards populated by JS -->
+                </div>
+                <div class="auction-actions">
+                    <button id="btn-start-auction" class="btn btn-primary" disabled>Start Auction</button>
+                    <p class="bid-count">Select horses and set your max bids</p>
+                </div>
+            </div>
+
+            <!-- Live Auction View -->
+            <div id="auction-live" class="auction-section" style="display: none;">
+                <div class="auction-ring">
+                    <div class="current-lot">
+                        <span class="lot-number">Lot <span id="lot-number">1</span> of <span id="total-lots">8</span></span>
+                        <h2 id="lot-horse-name">Horse Name</h2>
+                        <div class="lot-horse-age">Age: <span id="lot-horse-age">3</span> years</div>
+                    </div>
+
+                    <!-- Parade Ring -->
+                    <div id="parade-ring" class="parade-ring">
+                        <!-- Horse SVG populated by JS -->
+                    </div>
+
+                    <div class="lot-stats" id="lot-stats">
+                        <!-- Stats populated by JS -->
+                    </div>
+
+                    <div class="bidding-display">
+                        <div class="current-bid-label">Current Bid</div>
+                        <div class="current-bid-amount">£<span id="current-bid">0</span></div>
+                        <div class="current-bidder">Leading: <span id="leading-bidder">-</span></div>
+                    </div>
+
+                    <div class="your-bid-info">
+                        <div id="your-max-bid-display" class="your-max-bid">
+                            Your Max Bid: <span id="your-max-bid">Not bidding</span>
+                        </div>
+                        <div id="bid-status" class="bid-status"></div>
+                    </div>
+
+                    <div class="auction-controls">
+                        <button id="btn-next-lot" class="btn btn-primary" style="display: none;">Next Lot →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auction Results View -->
+            <div id="auction-results" class="auction-section" style="display: none;">
+                <div class="results-container">
+                    <h2>Auction Complete</h2>
+                    <div id="results-summary" class="results-summary">
+                        <!-- Populated by JS -->
+                    </div>
+                    <div id="horses-won" class="horses-won">
+                        <!-- Populated by JS -->
+                    </div>
+                    <button id="btn-finish-auction" class="btn btn-primary">Return to Dashboard</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Yearling Sale Screen -->
+        <div id="yearling-sale" class="screen">
+            <header class="game-header">
+                <div class="header-left">
+                    <button id="btn-yearling-back-dashboard" class="btn-icon">← Back</button>
+                    <span class="page-title">Yearling Sale</span>
+                </div>
+                <div class="header-right">
+                    <span class="budget-display">£<span id="yearling-budget">500,000</span></span>
+                </div>
+            </header>
+
+            <!-- Yearling Catalogue View -->
+            <div id="yearling-catalogue" class="auction-section">
+                <div class="auction-intro">
+                    <h2>Yearling Sale</h2>
+                    <p>Browse young prospects. You can see their sire and dam stats, but the yearling's own abilities remain hidden until purchase.</p>
+                </div>
+                <div id="yearling-catalogue-grid" class="horse-catalogue">
+                    <!-- Yearling cards populated by JS -->
+                </div>
+                <div class="auction-actions">
+                    <button id="btn-start-yearling-sale" class="btn btn-primary" disabled>Start Sale</button>
+                    <p class="bid-count" id="yearling-bid-count">Select yearlings and set your max bids</p>
+                </div>
+            </div>
+
+            <!-- Yearling Live Auction View -->
+            <div id="yearling-live" class="auction-section" style="display: none;">
+                <div class="auction-ring">
+                    <div class="current-lot">
+                        <span class="lot-number">Lot <span id="yearling-lot-number">1</span> of <span id="yearling-total-lots">8</span></span>
+                        <h2 id="yearling-lot-name">Yearling Name</h2>
+                        <div class="lot-horse-age">Age: 1 year (Yearling)</div>
+                    </div>
+
+                    <div id="yearling-lot-parents" class="yearling-lot-parents">
+                        <!-- Parent stats populated by JS -->
+                    </div>
+
+                    <div class="yearling-hidden-stats-notice">
+                        Yearling's own stats will be revealed after purchase
+                    </div>
+
+                    <div class="bidding-display">
+                        <div class="current-bid-label">Current Bid</div>
+                        <div class="current-bid-amount">£<span id="yearling-current-bid">0</span></div>
+                        <div class="current-bidder">Leading: <span id="yearling-leading-bidder">-</span></div>
+                    </div>
+
+                    <div class="your-bid-info">
+                        <div class="your-max-bid">
+                            Your Max Bid: <span id="yearling-your-max-bid">Not bidding</span>
+                        </div>
+                        <div id="yearling-bid-status" class="bid-status"></div>
+                    </div>
+
+                    <div class="auction-controls">
+                        <button id="btn-next-yearling-lot" class="btn btn-primary" style="display: none;">Next Lot →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Yearling Results View -->
+            <div id="yearling-results" class="auction-section" style="display: none;">
+                <div class="results-container">
+                    <h2>Yearling Sale Complete</h2>
+                    <div id="yearling-results-summary" class="results-summary">
+                        <!-- Populated by JS -->
+                    </div>
+                    <div id="yearlings-won" class="horses-won">
+                        <!-- Populated by JS -->
+                    </div>
+                    <button id="btn-finish-yearling-sale" class="btn btn-primary">Return to Dashboard</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stable Screen -->
+        <div id="stable" class="screen">
+            <header class="game-header">
+                <div class="header-left">
+                    <button id="btn-stable-back" class="btn-icon">← Back</button>
+                    <span class="page-title">My Stable</span>
+                </div>
+                <div class="header-right">
+                    <span class="budget-display">£<span id="stable-budget">500,000</span></span>
+                </div>
+            </header>
+
+            <main class="stable-content">
+                <!-- Empty State -->
+                <div id="stable-empty" class="stable-empty">
+                    <div class="empty-icon">🐴</div>
+                    <h2>No Horses Yet</h2>
+                    <p>Visit Tattersalls to buy your first horse at auction.</p>
+                    <button id="btn-go-to-auction" class="btn btn-primary">Go to Auction</button>
+                </div>
+
+                <!-- Horse List -->
+                <div id="stable-list" class="stable-list" style="display: none;">
+                    <div class="stable-header">
+                        <h2>Your Horses</h2>
+                        <p class="stable-summary"><span id="stable-horse-count">0</span> horses in stable</p>
+                    </div>
+                    <div id="horse-grid" class="horse-grid">
+                        <!-- Horse cards populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Horse Detail Modal -->
+                <div id="horse-detail-modal" class="modal" style="display: none;">
+                    <div class="modal-content horse-detail">
+                        <button class="modal-close" id="btn-close-horse-detail">×</button>
+
+                        <div class="horse-detail-header">
+                            <h2 id="detail-horse-name">Horse Name</h2>
+                            <span class="horse-age-badge" id="detail-horse-age">3 years old</span>
+                        </div>
+
+                        <div class="horse-detail-body">
+                            <div class="detail-section">
+                                <h3>Attributes</h3>
+                                <div class="detail-stats" id="detail-stats">
+                                    <!-- Stats populated by JS -->
+                                </div>
+                            </div>
+
+                            <div class="detail-section">
+                                <h3>Training Focus</h3>
+                                <p class="training-help">Select an attribute to focus training on. This will gradually improve that stat.</p>
+                                <div class="training-options" id="training-options">
+                                    <button class="training-btn" data-focus="speed">
+                                        <span class="training-icon">💨</span>
+                                        <span class="training-label">Speed</span>
+                                    </button>
+                                    <button class="training-btn" data-focus="stamina">
+                                        <span class="training-icon">💪</span>
+                                        <span class="training-label">Stamina</span>
+                                    </button>
+                                    <button class="training-btn" data-focus="acceleration">
+                                        <span class="training-icon">⚡</span>
+                                        <span class="training-label">Acceleration</span>
+                                    </button>
+                                    <button class="training-btn" data-focus="temperament">
+                                        <span class="training-icon">🧠</span>
+                                        <span class="training-label">Temperament</span>
+                                    </button>
+                                </div>
+                                <div id="current-training-focus" class="current-training">
+                                    Current focus: <span id="focus-display">None</span>
+                                </div>
+                            </div>
+
+                            <div class="detail-section">
+                                <h3>Condition</h3>
+                                <div class="condition-display">
+                                    <div class="condition-bar-container">
+                                        <div class="condition-bar" id="detail-condition-bar" style="width: 100%"></div>
+                                    </div>
+                                    <span class="condition-value" id="detail-condition">100%</span>
+                                </div>
+                                <p class="condition-help">Condition affects race performance. Rest your horse between races.</p>
+                            </div>
+
+                            <div class="detail-section">
+                                <h3>Career Stats</h3>
+                                <div class="career-stats">
+                                    <div class="career-stat">
+                                        <span class="career-stat-value" id="detail-races">0</span>
+                                        <span class="career-stat-label">Races</span>
+                                    </div>
+                                    <div class="career-stat">
+                                        <span class="career-stat-value" id="detail-wins">0</span>
+                                        <span class="career-stat-label">Wins</span>
+                                    </div>
+                                    <div class="career-stat">
+                                        <span class="career-stat-value" id="detail-earnings">£0</span>
+                                        <span class="career-stat-label">Earnings</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Race Screen -->
+        <div id="race" class="screen">
+            <header class="game-header">
+                <div class="header-left">
+                    <button id="btn-race-back" class="btn-icon">← Back</button>
+                    <span class="page-title">Race Day</span>
+                </div>
+                <div class="header-right">
+                    <span class="season-display">Season <span id="race-season">1</span></span>
+                </div>
+            </header>
+
+            <!-- Race Calendar View -->
+            <div id="race-calendar" class="race-section">
+                <div class="race-calendar-header">
+                    <h2>Race Calendar</h2>
+                    <p>Select a race to enter your horse</p>
+                </div>
+                <div id="race-list" class="race-list">
+                    <!-- Race cards populated by JS -->
+                </div>
+            </div>
+
+            <!-- Horse Selection View -->
+            <div id="race-horse-select" class="race-section" style="display: none;">
+                <div class="race-info-header">
+                    <h2 id="selected-race-name">Race Name</h2>
+                    <div class="race-meta">
+                        <span id="selected-race-distance">Distance: 1 mile</span>
+                        <span class="race-prize-tag">Prize: £<span id="selected-race-prize">50,000</span></span>
+                    </div>
+                </div>
+                <h3>Select Your Horses</h3>
+                <div id="entry-horse-list" class="entry-horse-list">
+                    <!-- Horse options populated by JS -->
+                </div>
+                <div class="race-select-actions">
+                    <button id="btn-enter-race" class="btn btn-primary" disabled>Enter Race</button>
+                    <button id="btn-back-to-calendar" class="btn btn-secondary">← Back to Calendar</button>
+                </div>
+            </div>
+
+            <!-- Strategy Selection View -->
+            <div id="race-strategy" class="race-section" style="display: none;">
+                <div class="strategy-header">
+                    <h2>Choose Your Strategies</h2>
+                    <div class="race-runner-info">
+                        <span id="strategy-race-name">Race Name</span>
+                    </div>
+                </div>
+                <div id="strategy-entries" class="strategy-entries">
+                    <!-- Populated by JS: per-horse strategy selection -->
+                </div>
+                <div class="strategy-actions">
+                    <button id="btn-start-race" class="btn btn-primary" disabled>Start Race</button>
+                    <button id="btn-back-to-horses" class="btn btn-secondary">← Change Horses</button>
+                </div>
+            </div>
+
+            <!-- Live Race View -->
+            <div id="race-live" class="race-section" style="display: none;">
+                <div class="race-live-header">
+                    <h2 id="live-race-name">Race Name</h2>
+                    <div class="race-stage" id="race-stage">Starting...</div>
+                </div>
+
+                <!-- Race Track Visualization -->
+                <div class="race-track-container">
+                    <div class="race-track">
+                        <div class="track-markers">
+                            <span class="marker start">Start</span>
+                            <span class="marker quarter">2f</span>
+                            <span class="marker half">4f</span>
+                            <span class="marker three-quarter">6f</span>
+                            <span class="marker finish">Finish</span>
+                        </div>
+                        <div id="race-horses" class="race-horses">
+                            <!-- Horse positions populated by JS -->
+                        </div>
+                        <div class="finish-line"></div>
+                    </div>
+                </div>
+
+                <!-- Race Commentary -->
+                <div class="race-commentary">
+                    <div id="commentary-text" class="commentary-text">
+                        The horses are loading into the stalls...
+                    </div>
+                </div>
+
+                <!-- Decision Moment (hidden until needed) -->
+                <div id="decision-moment" class="decision-moment" style="display: none;">
+                    <div class="decision-prompt" id="decision-prompt">
+                        Decision prompt here
+                    </div>
+                    <div class="decision-options" id="decision-options">
+                        <!-- Decision buttons populated by JS -->
+                    </div>
+                    <div class="decision-timer">
+                        <div class="timer-bar" id="decision-timer-bar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Race Results View -->
+            <div id="race-results" class="race-section" style="display: none;">
+                <div class="results-header">
+                    <h2>Race Complete!</h2>
+                    <div id="result-race-name" class="result-race-name">Race Name</div>
+                </div>
+                <div class="results-podium" id="results-podium">
+                    <!-- Podium populated by JS -->
+                </div>
+                <div class="your-result" id="your-result">
+                    <!-- Your result populated by JS -->
+                </div>
+                <div class="results-breakdown" id="results-breakdown">
+                    <!-- Breakdown populated by JS -->
+                </div>
+                <button id="btn-finish-race" class="btn btn-primary">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Modal (replaces alert/confirm) -->
+    <div id="game-modal" class="game-modal-overlay" style="display:none;">
+        <div class="game-modal-box">
+            <h3 id="game-modal-title" class="game-modal-title">Title</h3>
+            <div id="game-modal-body" class="game-modal-body">Message</div>
+            <div id="game-modal-buttons" class="game-modal-buttons"></div>
+        </div>
+    </div>
+
+    <!-- Between-Races Interstitial -->
+    <div id="between-races" class="screen">
+        <header class="game-header">
+            <div class="header-left">
+                <span class="logo-small">🏇</span>
+                <span class="page-title">Between Races</span>
+            </div>
+            <div class="header-right">
+                <span class="season-display">Season <span id="between-season">1</span></span>
+            </div>
+        </header>
+        <main class="between-races-content" id="between-races-content">
+            <!-- Populated by JS -->
+        </main>
+    </div>
+
+    <!-- Gallops Screen (Yearling Training) -->
+    <div id="gallops" class="screen">
+        <header class="game-header">
+            <div class="header-left">
+                <button id="btn-gallops-back" class="btn-icon">← Back</button>
+                <span class="page-title">Gallops - Yearling Training</span>
+            </div>
+            <div class="header-right">
+                <span class="season-display">Season <span id="gallops-season">1</span></span>
+            </div>
+        </header>
+
+        <!-- Yearling Selection View -->
+        <div id="gallops-select" class="gallops-section">
+            <div class="gallops-intro">
+                <h2>Select a Yearling</h2>
+                <p>Choose a yearling to take to the gallops for a training workout.</p>
+            </div>
+            <div id="gallops-yearling-grid" class="gallops-yearling-grid">
+                <!-- Yearling cards populated by JS -->
+            </div>
+        </div>
+
+        <!-- Training Focus Selection View -->
+        <div id="gallops-focus" class="gallops-section" style="display: none;">
+            <div class="gallops-intro">
+                <h2>Training Focus</h2>
+                <p>Choose a stat to focus on for <strong id="gallops-focus-horse-name">Yearling Name</strong></p>
+            </div>
+            <div class="gallops-focus-options">
+                <button class="gallops-focus-btn" data-focus="speed">
+                    <span class="training-icon">💨</span>
+                    <span class="training-label">Speed</span>
+                </button>
+                <button class="gallops-focus-btn" data-focus="stamina">
+                    <span class="training-icon">💪</span>
+                    <span class="training-label">Stamina</span>
+                </button>
+                <button class="gallops-focus-btn" data-focus="acceleration">
+                    <span class="training-icon">⚡</span>
+                    <span class="training-label">Acceleration</span>
+                </button>
+                <button class="gallops-focus-btn" data-focus="temperament">
+                    <span class="training-icon">🧠</span>
+                    <span class="training-label">Temperament</span>
+                </button>
+            </div>
+            <div class="gallops-focus-actions">
+                <button id="btn-start-gallops" class="btn btn-primary" disabled>Start Gallop</button>
+                <button id="btn-gallops-back-select" class="btn btn-secondary">← Change Yearling</button>
+            </div>
+        </div>
+
+        <!-- Animated Workout View -->
+        <div id="gallops-workout" class="gallops-section" style="display: none;">
+            <div class="gallops-intro">
+                <h2>Gallops Workout</h2>
+            </div>
+            <div class="gallops-track-container">
+                <div class="gallops-track">
+                    <div class="gallops-track-markers">
+                        <span class="marker start">Start</span>
+                        <span class="marker half">Halfway</span>
+                        <span class="marker finish">Finish</span>
+                    </div>
+                    <div id="gallops-horse-lane" class="gallops-horse-lane">
+                        <!-- Horse sprite populated by JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="gallops-commentary">
+                <div id="gallops-commentary-text" class="commentary-text">
+                    Warming up...
+                </div>
+            </div>
+        </div>
+
+        <!-- Results View -->
+        <div id="gallops-results" class="gallops-section" style="display: none;">
+            <div class="gallops-intro">
+                <h2>Workout Complete</h2>
+            </div>
+            <div id="gallops-results-body" class="gallops-results-body">
+                <!-- Results populated by JS -->
+            </div>
+            <div class="gallops-results-actions">
+                <button id="btn-gallops-another" class="btn btn-primary">Return to Gallops</button>
+                <button id="btn-gallops-dashboard" class="btn btn-secondary">Return to Dashboard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Season Ceremony Screen -->
+    <div id="season-ceremony" class="screen">
+        <div id="ceremony-content" class="ceremony-content">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
