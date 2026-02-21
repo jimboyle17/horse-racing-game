@@ -107,14 +107,14 @@ const SILK_COLOURS = [
 // Mid: 7f-1m (balanced)
 // Stayer: 1m2f+ (stamina focused)
 const RACE_NAMES = [
-    { name: 'Dorington Stakes', distance: '1 mile', distanceFurlongs: 8, prize: 30000 },
-    { name: 'Pemberton Sprint', distance: '5 furlongs', distanceFurlongs: 5, prize: 25000 },
-    { name: 'Thornfield Handicap', distance: '7 furlongs', distanceFurlongs: 7, prize: 30000 },
-    { name: 'Ashbury Cup', distance: '1m 2f', distanceFurlongs: 10, prize: 40000 },
-    { name: 'Kingswood Classic', distance: '1m 4f', distanceFurlongs: 12, prize: 50000 },
-    { name: 'Lightning Sprint', distance: '6 furlongs', distanceFurlongs: 6, prize: 35000 },
-    { name: 'Whitehall Gold Cup', distance: '1m 2f', distanceFurlongs: 10, prize: 60000 },
-    { name: 'Champion Stakes', distance: '1 mile', distanceFurlongs: 8, prize: 100000 }
+    { name: 'Dorington Stakes', distance: '1 mile', distanceFurlongs: 8, prize: 30000, type: 'conditions' },
+    { name: 'Pemberton Sprint', distance: '5 furlongs', distanceFurlongs: 5, prize: 25000, type: 'handicap' },
+    { name: 'Thornfield Handicap', distance: '7 furlongs', distanceFurlongs: 7, prize: 30000, type: 'handicap' },
+    { name: 'Ashbury Cup', distance: '1m 2f', distanceFurlongs: 10, prize: 40000, type: 'handicap' },
+    { name: 'Kingswood Classic', distance: '1m 4f', distanceFurlongs: 12, prize: 50000, type: 'group' },
+    { name: 'Lightning Sprint', distance: '6 furlongs', distanceFurlongs: 6, prize: 35000, type: 'handicap' },
+    { name: 'Whitehall Gold Cup', distance: '1m 2f', distanceFurlongs: 10, prize: 60000, type: 'group' },
+    { name: 'Champion Stakes', distance: '1 mile', distanceFurlongs: 8, prize: 100000, type: 'group' }
 ];
 
 const DISTANCE_PREFERENCES = ['sprint', 'mid', 'stayer'];
@@ -465,6 +465,135 @@ function calculateHorseValue(horse) {
     return Math.round(baseValue * ageMultiplier / 1000) * 1000;
 }
 
+// ============================================
+// RATINGS & HANDICAP SYSTEM
+// ============================================
+
+/**
+ * Calculate Official Rating (OR) from horse stats, mapped to 0-140 scale
+ */
+function calculateOfficialRating(horse) {
+    const weightedAvg = (horse.speed * 0.30 + horse.stamina * 0.30 + horse.acceleration * 0.25 + horse.temperament * 0.15);
+    return Math.max(0, Math.min(140, Math.round(weightedAvg * 1.1 + 15)));
+}
+
+/**
+ * Convert weight in pounds to stones/pounds display string
+ */
+function formatWeight(lbs) {
+    const stones = Math.floor(lbs / 14);
+    const pounds = lbs % 14;
+    return `${stones}st ${pounds}lb`;
+}
+
+/**
+ * Speed multiplier based on weight carried.
+ * Reference = 126 lbs (9st 0lb) = 1.0
+ * 0.3% penalty per pound above reference, 0.3% bonus per pound below
+ * Distance factor: sprints x0.8, mid x1.0, stayers x1.2
+ */
+function getWeightMultiplier(weightLbs, distanceFurlongs) {
+    const reference = 126;
+    const diff = weightLbs - reference;
+    const distanceCategory = getRaceDistanceCategory(distanceFurlongs);
+    const distanceFactor = distanceCategory === 'sprint' ? 0.8 : distanceCategory === 'stayer' ? 1.2 : 1.0;
+    const multiplier = 1 - (diff * 0.003 * distanceFactor);
+    return Math.max(0.958, Math.min(1.042, multiplier));
+}
+
+/**
+ * Calculate handicap weights: top-rated carries 10st 0lb (140 lbs),
+ * each OR point below = 1 lb less. Floor: 8st 0lb (112 lbs).
+ */
+function calculateHandicapWeights(runners) {
+    const maxOR = Math.max(...runners.map(r => r.officialRating || 0));
+    runners.forEach(runner => {
+        const or = runner.officialRating || 0;
+        const weightLbs = Math.max(112, 140 - (maxOR - or));
+        runner.weightLbs = weightLbs;
+        runner.weightDisplay = formatWeight(weightLbs);
+    });
+}
+
+/**
+ * Assign race weights based on race type.
+ * Handicap: weighted by OR. Group/conditions: all carry 9st 0lb.
+ */
+function assignRaceWeights(runners, raceType) {
+    if (raceType === 'handicap') {
+        calculateHandicapWeights(runners);
+    } else {
+        runners.forEach(runner => {
+            runner.weightLbs = 126;
+            runner.weightDisplay = formatWeight(126);
+        });
+    }
+}
+
+/**
+ * Adjust Official Ratings after a race for player horses.
+ * Returns array of { horseId, oldRating, newRating, change }
+ */
+function adjustRatingsAfterRace(finalPositions, raceType) {
+    const baseChanges = { 1: 6, 2: 3, 3: 1, 4: 0, 5: -1, 6: -2, 7: -3, 8: -4 };
+    const typeMultiplier = raceType === 'group' ? 1.6 : raceType === 'conditions' ? 1.3 : 1.0;
+
+    const ratingChanges = [];
+
+    finalPositions.forEach(runner => {
+        if (!runner.isPlayer) return;
+
+        const horse = GameState.horses.find(h => h.id === runner.id);
+        if (!horse || horse.officialRating == null) return;
+
+        const oldRating = horse.officialRating;
+        let baseChange = baseChanges[runner.finalPlace] !== undefined ? baseChanges[runner.finalPlace] : -4;
+        let change = Math.round(baseChange * typeMultiplier);
+
+        // Bonus: impressive winner (big margin)
+        if (runner.finalPlace === 1) {
+            const secondPlace = finalPositions.find(r => r.finalPlace === 2);
+            if (secondPlace) {
+                const margin = runner.position - secondPlace.position;
+                if (margin > 8) change += 4;
+                else if (margin > 4) change += 2;
+            }
+        }
+
+        // Bonus: winning off top weight in handicap
+        if (runner.finalPlace === 1 && raceType === 'handicap') {
+            const maxWeight = Math.max(...finalPositions.map(r => r.weightLbs || 126));
+            if ((runner.weightLbs || 126) >= maxWeight) {
+                change += 2;
+            }
+        }
+
+        const newRating = Math.max(30, Math.min(140, oldRating + change));
+        horse.officialRating = newRating;
+        horse._lastRatingChange = newRating - oldRating;
+        horse._lastOldRating = oldRating;
+
+        if (!horse.ratingHistory) horse.ratingHistory = [];
+        horse.ratingHistory.push({
+            raceName: RaceState.selectedRace.name,
+            oldRating: oldRating,
+            newRating: newRating,
+            change: newRating - oldRating,
+            position: runner.finalPlace
+        });
+
+        ratingChanges.push({
+            horseId: horse.id,
+            horseName: horse.name,
+            oldRating: oldRating,
+            newRating: newRating,
+            change: newRating - oldRating
+        });
+    });
+
+    return ratingChanges;
+}
+
 /**
  * Generate a horse for auction (Phase 2: now includes silk colours)
  */
@@ -489,10 +618,14 @@ function generateHorse(qualityTier = 'medium') {
         silkPrimary: silk.primary,
         silkSecondary: silk.secondary,
         distancePreference: DISTANCE_PREFERENCES[randomInt(0, DISTANCE_PREFERENCES.length - 1)],
-        groundPreference: GROUND_CONDITIONS[randomInt(0, GROUND_CONDITIONS.length - 1)]
+        groundPreference: GROUND_CONDITIONS[randomInt(0, GROUND_CONDITIONS.length - 1)],
+        pendingAuction: false,
+        reservePrice: 0
     };
 
     horse.estimatedValue = calculateHorseValue(horse);
+    horse.officialRating = calculateOfficialRating(horse);
+    horse.ratingHistory = [];
     return horse;
 }
 
@@ -571,10 +704,14 @@ function generateYearling(qualityTier = 'medium') {
         isYearling: true,
         isRaceReady: false,
         sire: sire,
-        dam: dam
+        dam: dam,
+        pendingAuction: false,
+        reservePrice: 0
     };
 
     yearling.estimatedValue = calculateYearlingValue(sire, dam);
+    yearling.officialRating = null;
+    yearling.ratingHistory = [];
     return yearling;
 }
 
@@ -647,6 +784,7 @@ function applyAgingEffects() {
         if (horse.isYearling && horse.age >= 2) {
             horse.isYearling = false;
             horse.isRaceReady = true;
+            horse.officialRating = calculateOfficialRating(horse);
             GameState._graduatedYearlings.push(horse.name);
         }
 
@@ -910,8 +1048,10 @@ function updateNextRaceDisplay() {
         const groundHTML = groundVisible
             ? `<br>Going: <span class="ground-badge ground-${groundText.toLowerCase().replace(/ /g, '-')}">${groundText}</span>`
             : '';
+        const dashRaceType = nextRace.type || 'conditions';
+        const dashTypeBadge = `<span class="race-type-badge ${dashRaceType}">${dashRaceType === 'handicap' ? 'Handicap' : dashRaceType === 'group' ? 'Group Race' : 'Conditions'}</span>`;
         nextRaceContainer.innerHTML = `
-            <div class="race-name">${nextRace.name}</div>
+            <div class="race-name">${nextRace.name} ${dashTypeBadge}</div>
             <div class="race-details">
                 Race ${nextRace.raceNumber} of ${GameState.races.length}<br>
                 Distance: ${nextRace.distance}
@@ -1016,6 +1156,30 @@ function loadGame() {
             if (h.isRaceReady === undefined) h.isRaceReady = true;
         });
 
+        // Migration: add official rating and rating history if missing
+        GameState.horses.forEach(h => {
+            if (h.officialRating === undefined) {
+                h.officialRating = h.isYearling ? null : calculateOfficialRating(h);
+            }
+            if (!h.ratingHistory) {
+                h.ratingHistory = [];
+            }
+        });
+        // Migration: add race type if missing
+        if (GameState.races) {
+            GameState.races.forEach((r, i) => {
+                if (!r.type && RACE_NAMES[i]) {
+                    r.type = RACE_NAMES[i].type;
+                }
+            });
+        }
+
+        // Migration: add selling auction properties if missing
+        GameState.horses.forEach(h => {
+            if (h.pendingAuction === undefined) h.pendingAuction = false;
+            if (h.reservePrice === undefined) h.reservePrice = 0;
+        });
+
         updateDashboard();
         showScreen('dashboard');
         return true;
@@ -1034,6 +1198,14 @@ const AuctionState = {
     results: [],
     horsesWon: [],
     totalSpent: 0
+};
+
+const SellingAuctionState = {
+    catalogue: [],
+    currentLotIndex: 0,
+    results: [],
+    totalRevenue: 0,
+    returnScreen: 'between-races'
 };
 
 function generateAuctionCatalogue() {
@@ -2205,19 +2377,33 @@ function renderStableHorseCard(horse) {
         </div>
     ` : '';
 
+    const pendingSaleBadge = horse.pendingAuction ? `
+        <div class="pending-sale-badge">
+            \u{1F3F7}\uFE0F For Sale - Reserve: \u00A3${formatMoney(horse.reservePrice)}
+        </div>
+    ` : '';
+
     const ageDisplay = horse.isYearling ? '1 yr (Yearling)' : `${horse.age} yrs`;
 
     const parentageInfo = horse.sire && horse.dam ? `
         <div class="stable-parentage-info">Sire: ${horse.sire.name} | Dam: ${horse.dam.name}</div>
     ` : '';
 
+    const orDisplay = horse.officialRating != null ? horse.officialRating : '--';
+
+    const cardClasses = ['stable-horse-card'];
+    if (isInjured) cardClasses.push('injured');
+    if (horse.pendingAuction) cardClasses.push('pending-sale');
+
     return `
-        <div class="stable-horse-card ${isInjured ? 'injured' : ''}" data-horse-id="${horse.id}">
+        <div class="${cardClasses.join(' ')}" data-horse-id="${horse.id}">
             <div class="stable-card-header">
                 <span class="horse-name">${swatch}${horse.name}</span>
+                <span class="or-badge-stable">OR ${orDisplay}</span>
                 <span class="horse-age">${ageDisplay}</span>
             </div>
             ${yearlingBadge}
+            ${pendingSaleBadge}
             ${injuryBadge}
             ${parentageInfo}
             <div class="stable-card-stats">
@@ -2365,6 +2551,42 @@ function openHorseDetail(horseId) {
     document.getElementById('detail-wins').textContent = horse.wins || 0;
     document.getElementById('detail-earnings').textContent = `\u00A3${formatMoney(horse.totalEarnings || 0)}`;
 
+    // Official Rating section
+    let existingORSection = document.getElementById('detail-or-section');
+    if (existingORSection) existingORSection.remove();
+
+    const orSection = document.createElement('div');
+    orSection.id = 'detail-or-section';
+    orSection.className = 'detail-section';
+
+    const orValue = horse.officialRating != null ? horse.officialRating : '--';
+    let historyHTML = '';
+    if (horse.ratingHistory && horse.ratingHistory.length > 0) {
+        const recent = horse.ratingHistory.slice(-5).reverse();
+        historyHTML = `<div class="rating-history">${recent.map(entry => {
+            const changeClass = entry.change > 0 ? 'rating-up' : entry.change < 0 ? 'rating-down' : 'rating-same';
+            const changeSign = entry.change > 0 ? '+' : '';
+            return `<div class="rating-history-item">
+                <span>${entry.raceName}</span>
+                <span>${getOrdinal(entry.position)}</span>
+                <span class="${changeClass}">${entry.oldRating} \u2192 ${entry.newRating} (${changeSign}${entry.change})</span>
+            </div>`;
+        }).join('')}</div>`;
+    }
+
+    orSection.innerHTML = `
+        <h3>Official Rating</h3>
+        <div class="or-display">
+            <span class="or-value-large">${orValue}</span>
+        </div>
+        ${historyHTML}
+    `;
+
+    const careerStatsSection = document.querySelector('#horse-detail-modal .detail-section:last-of-type');
+    if (careerStatsSection && careerStatsSection.parentNode) {
+        careerStatsSection.parentNode.insertBefore(orSection, careerStatsSection.nextSibling);
+    }
+
     // Yearling: show gallops option instead of regular training
     const trainingOptions = document.getElementById('training-options');
     const trainingHelp = document.querySelector('.training-help');
@@ -2406,6 +2628,27 @@ function openHorseDetail(horseId) {
     updateTrainingButtons(horse);
     document.getElementById('focus-display').textContent = horse.trainingFocus ? capitalizeFirst(horse.trainingFocus) : 'None';
 
+    // Sell at Tattersalls button (non-yearling horses only)
+    const existingSellBtn = document.getElementById('btn-sell-horse');
+    if (existingSellBtn) existingSellBtn.remove();
+
+    if (!horse.isYearling) {
+        const sellBtn = document.createElement('button');
+        sellBtn.id = 'btn-sell-horse';
+
+        if (horse.pendingAuction) {
+            sellBtn.className = 'btn btn-cancel-sale';
+            sellBtn.textContent = `Cancel Sale (Reserve: \u00A3${formatMoney(horse.reservePrice)})`;
+            sellBtn.addEventListener('click', () => cancelHorseSale(horse.id));
+        } else {
+            sellBtn.className = 'btn btn-sell';
+            sellBtn.textContent = '\u{1F3F7}\uFE0F Sell at Tattersalls';
+            sellBtn.addEventListener('click', () => initiateHorseSale(horse.id));
+        }
+
+        document.querySelector('.horse-detail-body').appendChild(sellBtn);
+    }
+
     document.getElementById('horse-detail-modal').style.display = 'flex';
 }
 
@@ -2439,6 +2682,348 @@ function setTrainingFocus(focus) {
 function closeHorseDetail() {
     document.getElementById('horse-detail-modal').style.display = 'none';
     selectedHorseId = null;
+}
+
+// ============================================
+// SELLING AUCTION SYSTEM
+// ============================================
+
+function showReservePriceModal(horseName, estimatedValue) {
+    return new Promise(resolve => {
+        const overlay = document.getElementById('game-modal');
+        document.getElementById('game-modal-title').textContent = 'Set Reserve Price';
+        document.getElementById('game-modal-body').innerHTML = `
+            <p>Set the minimum price you'll accept for <strong>${horseName}</strong>.</p>
+            <p style="margin-top: var(--space-sm); color: var(--color-text-light);">Estimated value: \u00A3${formatMoney(estimatedValue)}</p>
+            <div class="reserve-input-group">
+                <label>Reserve \u00A3</label>
+                <input type="number" id="reserve-price-input" value="${estimatedValue}" min="5000" step="5000">
+            </div>
+        `;
+
+        const btnContainer = document.getElementById('game-modal-buttons');
+        btnContainer.innerHTML = '';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', () => {
+            overlay.style.display = 'none';
+            resolve(null);
+        });
+        btnContainer.appendChild(cancelBtn);
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'btn btn-primary';
+        confirmBtn.textContent = 'Set Reserve';
+        confirmBtn.addEventListener('click', () => {
+            const input = document.getElementById('reserve-price-input');
+            const value = parseInt(input.value) || estimatedValue;
+            overlay.style.display = 'none';
+            resolve(Math.max(5000, Math.round(value / 5000) * 5000));
+        });
+        btnContainer.appendChild(confirmBtn);
+
+        overlay.style.display = 'flex';
+    });
+}
+
+async function initiateHorseSale(horseId) {
+    const horse = GameState.horses.find(h => h.id === horseId);
+    if (!horse) return;
+
+    const confirmed = await gameConfirm('Sell at Tattersalls', `Enter ${horse.name} into the next Tattersalls sale?`);
+    if (!confirmed) return;
+
+    const estimatedValue = calculateHorseValue(horse);
+    const reservePrice = await showReservePriceModal(horse.name, estimatedValue);
+    if (reservePrice === null) return;
+
+    horse.pendingAuction = true;
+    horse.reservePrice = reservePrice;
+    console.log('[Sell] Horse listed:', horse.name, 'pendingAuction:', horse.pendingAuction, 'reserve:', horse.reservePrice);
+
+    closeHorseDetail();
+    renderStableHorses();
+    await gameAlert('Listed for Sale', `${horse.name} has been entered into the next Tattersalls sale with a reserve of \u00A3${formatMoney(reservePrice)}.`);
+}
+
+async function cancelHorseSale(horseId) {
+    const horse = GameState.horses.find(h => h.id === horseId);
+    if (!horse) return;
+
+    const confirmed = await gameConfirm('Cancel Sale', `Remove ${horse.name} from the Tattersalls sale?`);
+    if (!confirmed) return;
+
+    horse.pendingAuction = false;
+    horse.reservePrice = 0;
+
+    closeHorseDetail();
+    renderStableHorses();
+}
+
+function runSellingAuction() {
+    const pendingHorses = GameState.horses.filter(h => h.pendingAuction);
+    if (pendingHorses.length === 0) return;
+
+    // Track which screen to return to after the sale
+    SellingAuctionState.returnScreen = document.getElementById('season-ceremony').classList.contains('active')
+        ? 'season-ceremony' : 'between-races';
+
+    SellingAuctionState.catalogue = [...pendingHorses];
+    SellingAuctionState.currentLotIndex = 0;
+    SellingAuctionState.results = [];
+    SellingAuctionState.totalRevenue = 0;
+
+    document.getElementById('selling-auction-budget').textContent = formatMoney(GameState.budget);
+    document.getElementById('selling-total-lots').textContent = SellingAuctionState.catalogue.length;
+
+    document.getElementById('selling-auction-live').style.display = 'block';
+    document.getElementById('selling-auction-results').style.display = 'none';
+
+    showScreen('selling-auction');
+    runSellingLot();
+}
+
+function runSellingLot() {
+    const horse = SellingAuctionState.catalogue[SellingAuctionState.currentLotIndex];
+
+    document.getElementById('selling-lot-number').textContent = SellingAuctionState.currentLotIndex + 1;
+    document.getElementById('selling-lot-name').textContent = horse.name;
+    document.getElementById('selling-lot-age').textContent = horse.age;
+
+    // Parade ring SVG (bare horse at sales)
+    document.getElementById('selling-parade-ring').innerHTML = `
+        <div class="parade-horse">
+          <svg class="horse-svg" viewBox="0 0 56 36" xmlns="http://www.w3.org/2000/svg">
+            <path class="h-tail" d="M9,16 Q5,13 3,9 Q2,6 4,4 Q4,7 5,10 Q6,13 8,15" fill="#3a1f0d"/>
+            <rect class="h-leg h-leg-hr" x="13" y="22" width="2.2" height="12" rx="1" fill="#4a2512"/>
+            <rect class="h-leg h-leg-hl" x="16" y="22" width="2.2" height="12" rx="1" fill="#3d200f"/>
+            <rect class="h-leg h-leg-fr" x="34" y="22" width="2.2" height="12" rx="1" fill="#4a2512"/>
+            <rect class="h-leg h-leg-fl" x="37" y="22" width="2.2" height="12" rx="1" fill="#3d200f"/>
+            <rect x="13" y="33" width="2.2" height="1.5" rx="0.5" fill="#1a0a04" class="h-leg h-leg-hr"/>
+            <rect x="16" y="33" width="2.2" height="1.5" rx="0.5" fill="#1a0a04" class="h-leg h-leg-hl"/>
+            <rect x="34" y="33" width="2.2" height="1.5" rx="0.5" fill="#1a0a04" class="h-leg h-leg-fr"/>
+            <rect x="37" y="33" width="2.2" height="1.5" rx="0.5" fill="#1a0a04" class="h-leg h-leg-fl"/>
+            <path d="
+              M10,23 Q7,20 7,16 Q7,12 12,12 L22,11 L28,10.5
+              Q32,9 35,6 Q37,3.5 40,3.5 L42,3.5
+              Q44,3 45,4 Q47,4.5 48,6.5 Q48.5,8 47,9
+              Q45,10.5 43,12 Q40,16 38,20 L36,23
+              Q28,19 18,23 Z
+            " fill="#6b3a1f"/>
+            <path d="M10,23 Q28,19 36,23 L36,23 Q28,21 18,23 Z" fill="#5a2e16" opacity="0.5"/>
+            <ellipse cx="14" cy="16" rx="4" ry="3" fill="#7a4525" opacity="0.4"/>
+            <ellipse cx="33" cy="15" rx="3" ry="3.5" fill="#7a4525" opacity="0.35"/>
+            <polygon points="41,3.5 40,0.5 43,2.5" fill="#5a2e16"/>
+            <circle cx="45" cy="5.5" r="0.9" fill="#222"/>
+            <circle cx="45.2" cy="5.3" r="0.3" fill="#555"/>
+            <circle cx="47.5" cy="7.8" r="0.6" fill="#4a2512"/>
+            <path class="h-mane" d="M28,10.5 Q31,7 34,5 Q36,3.5 39,3.5" stroke="#3a1f0d" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <path d="M43,4 L46,5 L47,7.5 L45,9" stroke="#1a3a6c" stroke-width="0.8" fill="none" stroke-linecap="round"/>
+            <path d="M44,6.5 L46.5,6" stroke="#1a3a6c" stroke-width="0.8" fill="none" stroke-linecap="round"/>
+            <path d="M45,9 Q43,12 40,14 Q38,16 36,15" stroke="#555" stroke-width="0.6" fill="none" stroke-dasharray="1.5,1"/>
+          </svg>
+        </div>
+    `;
+
+    // Stat bars
+    document.getElementById('selling-lot-stats').innerHTML = `
+        <div class="stat-row">
+            <span class="stat-label">Speed</span>
+            <div class="stat-bar-container">
+                <div class="stat-bar speed" style="width: ${horse.speed}%"></div>
+            </div>
+            <span class="stat-value">${horse.speed}</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Stamina</span>
+            <div class="stat-bar-container">
+                <div class="stat-bar stamina" style="width: ${horse.stamina}%"></div>
+            </div>
+            <span class="stat-value">${horse.stamina}</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Acceleration</span>
+            <div class="stat-bar-container">
+                <div class="stat-bar acceleration" style="width: ${horse.acceleration}%"></div>
+            </div>
+            <span class="stat-value">${horse.acceleration}</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Temperament</span>
+            <div class="stat-bar-container">
+                <div class="stat-bar temperament" style="width: ${horse.temperament}%"></div>
+            </div>
+            <span class="stat-value">${horse.temperament}</span>
+        </div>
+    `;
+
+    document.getElementById('selling-reserve-display').textContent = formatMoney(horse.reservePrice);
+    document.getElementById('btn-next-selling-lot').style.display = 'none';
+
+    simulateSellingBidding(horse);
+}
+
+function simulateSellingBidding(horse) {
+    const estimatedValue = calculateHorseValue(horse);
+    let currentBid = Math.round(estimatedValue * (0.5 + Math.random() * 0.2) / 5000) * 5000;
+    currentBid = Math.max(5000, currentBid);
+
+    // Select 2-4 AI bidders
+    const numBidders = randomInt(2, 4);
+    const shuffled = [...GameState.competitors].sort(() => Math.random() - 0.5);
+    const bidders = shuffled.slice(0, numBidders).map(c => {
+        const injuryMult = horse.isInjured ? 0.6 : 1.0;
+        const maxBid = Math.round(estimatedValue * (0.7 + Math.random() * 0.6) * injuryMult / 5000) * 5000;
+        return { name: c.name, maxBid: Math.max(5000, maxBid) };
+    });
+
+    const bidIncrement = 5000;
+    let leadingBidder = bidders[0].name;
+    let bidRound = 0;
+
+    document.getElementById('selling-current-bid').textContent = formatMoney(currentBid);
+    document.getElementById('selling-leading-bidder').textContent = leadingBidder;
+
+    const reserveMet = currentBid >= horse.reservePrice;
+    const statusEl = document.getElementById('selling-bid-status');
+    statusEl.textContent = reserveMet ? 'Reserve met!' : 'Below reserve';
+    statusEl.className = `bid-status ${reserveMet ? 'winning' : 'outbid'}`;
+
+    const interval = setInterval(() => {
+        // Find bidders willing to bid higher
+        const activeBidders = bidders.filter(b => b.maxBid > currentBid && b.name !== leadingBidder);
+
+        if (activeBidders.length === 0) {
+            clearInterval(interval);
+            SoundManager.playGavel();
+
+            const sold = currentBid >= horse.reservePrice;
+            const statusEl = document.getElementById('selling-bid-status');
+
+            if (sold) {
+                statusEl.textContent = `SOLD to ${leadingBidder} for \u00A3${formatMoney(currentBid)}!`;
+                statusEl.className = 'bid-status winning';
+            } else {
+                statusEl.textContent = `Not sold - bidding did not reach reserve`;
+                statusEl.className = 'bid-status outbid';
+            }
+
+            SellingAuctionState.results.push({
+                horse: horse,
+                sold: sold,
+                finalPrice: sold ? currentBid : 0,
+                buyer: sold ? leadingBidder : null
+            });
+
+            if (sold) {
+                SellingAuctionState.totalRevenue += currentBid;
+            }
+
+            // Auto-advance after 2 seconds
+            setTimeout(() => {
+                nextSellingLot();
+            }, 2000);
+            return;
+        }
+
+        // Pick a random active bidder
+        const bidder = activeBidders[randomInt(0, activeBidders.length - 1)];
+        currentBid += bidIncrement;
+        leadingBidder = bidder.name;
+        bidRound++;
+
+        document.getElementById('selling-current-bid').textContent = formatMoney(currentBid);
+        document.getElementById('selling-leading-bidder').textContent = leadingBidder;
+
+        const reserveNowMet = currentBid >= horse.reservePrice;
+        const statusDisplay = document.getElementById('selling-bid-status');
+        statusDisplay.textContent = reserveNowMet ? 'Reserve met!' : 'Below reserve';
+        statusDisplay.className = `bid-status ${reserveNowMet ? 'winning' : 'outbid'}`;
+
+    }, 600);
+}
+
+function nextSellingLot() {
+    SellingAuctionState.currentLotIndex++;
+
+    if (SellingAuctionState.currentLotIndex >= SellingAuctionState.catalogue.length) {
+        showSellingResults();
+    } else {
+        runSellingLot();
+    }
+}
+
+function showSellingResults() {
+    document.getElementById('selling-auction-live').style.display = 'none';
+    document.getElementById('selling-auction-results').style.display = 'block';
+
+    const soldCount = SellingAuctionState.results.filter(r => r.sold).length;
+    const unsoldCount = SellingAuctionState.results.filter(r => !r.sold).length;
+
+    document.getElementById('selling-results-summary').innerHTML = `
+        <p>Horses sold: <span class="highlight">${soldCount}</span></p>
+        <p>Horses unsold: <span class="highlight">${unsoldCount}</span></p>
+        <p>Total revenue: <span class="highlight">\u00A3${formatMoney(SellingAuctionState.totalRevenue)}</span></p>
+    `;
+
+    let horsesHTML = '';
+    if (SellingAuctionState.results.length > 0) {
+        horsesHTML = '<h3>Sale Results</h3>';
+        SellingAuctionState.results.forEach(result => {
+            if (result.sold) {
+                horsesHTML += `
+                    <div class="won-horse-card">
+                        <div class="horse-name">${result.horse.name}</div>
+                        <div class="purchase-price">Sold to ${result.buyer} for \u00A3${formatMoney(result.finalPrice)}</div>
+                    </div>
+                `;
+            } else {
+                horsesHTML += `
+                    <div class="won-horse-card unsold">
+                        <div class="horse-name">${result.horse.name}</div>
+                        <div class="purchase-price">Not sold - reserve of \u00A3${formatMoney(result.horse.reservePrice)} not met</div>
+                    </div>
+                `;
+            }
+        });
+    }
+
+    document.getElementById('selling-results-horses').innerHTML = horsesHTML;
+}
+
+function finishSellingAuction() {
+    // Apply results: remove sold horses, clear flags on unsold
+    SellingAuctionState.results.forEach(result => {
+        if (result.sold) {
+            const idx = GameState.horses.findIndex(h => h.id === result.horse.id);
+            if (idx !== -1) {
+                GameState.horses.splice(idx, 1);
+            }
+            GameState.budget += result.finalPrice;
+        } else {
+            const horse = GameState.horses.find(h => h.id === result.horse.id);
+            if (horse) {
+                horse.pendingAuction = false;
+                horse.reservePrice = 0;
+            }
+        }
+    });
+
+    // Remove the selling section from whichever screen we came from
+    const betweenContent = document.getElementById('between-races-content');
+    if (betweenContent) {
+        const sellingSection = betweenContent.querySelector('.selling-auction-section');
+        if (sellingSection) sellingSection.remove();
+    }
+    const ceremonyContent = document.getElementById('ceremony-content');
+    if (ceremonyContent) {
+        const sellingSection = ceremonyContent.querySelector('.selling-auction-section');
+        if (sellingSection) sellingSection.remove();
+    }
+
+    showScreen(SellingAuctionState.returnScreen);
 }
 
 /**
@@ -2625,6 +3210,10 @@ function renderRaceCalendar() {
         };
         const categoryLabel = categoryLabels[distanceCategory];
 
+        // Race type badge
+        const raceType = race.type || 'conditions';
+        const raceTypeBadge = `<span class="race-type-badge ${raceType}">${raceType === 'handicap' ? 'Handicap' : raceType === 'group' ? 'Group Race' : 'Conditions'}</span>`;
+
         // Ground is visible for race 0 always, and for any race where the previous race is completed
         const groundVisible = index === 0 || (GameState.races[index - 1] && GameState.races[index - 1].completed);
         const groundHTML = groundVisible
@@ -2647,7 +3236,7 @@ function renderRaceCalendar() {
                 <div class="race-card-left">
                     <div class="race-number">${race.raceNumber}</div>
                     <div class="race-card-info">
-                        <h3>${race.name}</h3>
+                        <h3>${race.name} ${raceTypeBadge}</h3>
                         <div class="race-card-meta">
                             ${race.distance} <span class="distance-category ${distanceCategory}">${categoryLabel}</span>
                             ${groundHTML}
@@ -2683,11 +3272,15 @@ function selectRace(raceIndex) {
     const info = categoryInfo[distanceCategory];
     const groundText = RaceState.selectedRace.ground || 'Good';
 
+    const raceType = RaceState.selectedRace.type || 'conditions';
+    const raceTypeBadge = `<span class="race-type-badge ${raceType}">${raceType === 'handicap' ? 'Handicap' : raceType === 'group' ? 'Group Race' : 'Conditions'}</span>`;
+
     document.getElementById('selected-race-name').textContent = RaceState.selectedRace.name;
     document.getElementById('selected-race-distance').innerHTML = `
         ${RaceState.selectedRace.distance}
         <span class="distance-category ${distanceCategory}">${info.label}</span>
         <span class="ground-badge ground-${groundText.toLowerCase().replace(/ /g, '-')}">${groundText}</span>
+        ${raceTypeBadge}
         <br><small class="distance-tip">${info.tip}</small>
     `;
     document.getElementById('selected-race-prize').textContent = formatMoney(RaceState.selectedRace.prize);
@@ -2706,13 +3299,23 @@ function renderHorseOptions() {
     const horseList = document.getElementById('entry-horse-list');
 
     const raceEligible = GameState.horses.filter(h => !h.isYearling);
-    const availableHorses = raceEligible.filter(h => !h.isInjured);
+    const availableHorses = raceEligible.filter(h => !h.isInjured && !h.pendingAuction);
     if (availableHorses.length === 0) {
         const hasYearlings = GameState.horses.some(h => h.isYearling);
+        const hasPendingSale = GameState.horses.some(h => h.pendingAuction);
+        let msg1 = 'All your horses are currently injured!';
+        let msg2 = "You'll need to skip this race or wait for them to recover.";
+        if (hasYearlings) {
+            msg1 = 'Your yearlings are not old enough to race yet!';
+            msg2 = 'Yearlings must turn 2 before they can enter races.';
+        } else if (hasPendingSale) {
+            msg1 = 'All your horses are listed for sale or injured!';
+            msg2 = 'Cancel a sale from the stable to make a horse available.';
+        }
         horseList.innerHTML = `
             <div class="no-horses-available">
-                <p>\u26A0\uFE0F ${hasYearlings ? 'Your yearlings are not old enough to race yet!' : 'All your horses are currently injured!'}</p>
-                <p>${hasYearlings ? 'Yearlings must turn 2 before they can enter races.' : "You'll need to skip this race or wait for them to recover."}</p>
+                <p>\u26A0\uFE0F ${msg1}</p>
+                <p>${msg2}</p>
             </div>
         `;
         return;
@@ -2740,26 +3343,30 @@ function renderHorseOptions() {
         const groundMismatch = Math.abs(horseGroundIdx - raceGroundIdx);
         const groundSuit = groundMismatch === 0 ? '\u2705' : groundMismatch <= 1 ? '\u{1F7E1}' : '\u274C';
 
+        const isPendingSale = horse.pendingAuction;
         let warningText = '';
         if (isInjured) {
             warningText = `\u{1F6AB} ${horse.injuryType} - Out for ${horse.recoveryRacesLeft} more race${horse.recoveryRacesLeft > 1 ? 's' : ''}`;
+        } else if (isPendingSale) {
+            warningText = '\u{1F6AB} Listed for sale at Tattersalls';
         } else if (horse.condition < 70) {
             warningText = 'Low condition will affect performance';
         }
 
+        const isDisabled = isInjured || isPendingSale;
         const atMax = RaceState.selectedHorseIds.size >= maxEntries && !isSelected;
-        const cardClass = isInjured ? 'entry-horse-card injured disabled' :
+        const cardClass = isDisabled ? 'entry-horse-card injured disabled' :
                          atMax ? 'entry-horse-card disabled' :
                          isSelected ? 'entry-horse-card selected' :
                          horse.condition < 70 ? 'entry-horse-card low-condition' : 'entry-horse-card';
-        const clickHandler = (isInjured || atMax) ? '' : `onclick="toggleHorseForRace('${horse.id}')"`;
+        const clickHandler = (isDisabled || atMax) ? '' : `onclick="toggleHorseForRace('${horse.id}')"`;
 
         return `
             <div class="${cardClass}" data-horse-id="${horse.id}" ${clickHandler}>
                 <div class="entry-horse-header">
                     <span class="horse-name">${swatch}${horse.name}</span>
-                    <span class="condition-badge ${conditionClass}">${conditionText}${!isInjured ? ' ' + horse.condition + '%' : ''}</span>
-                    ${!isInjured ? `<span class="select-indicator">${isSelected ? '\u2714' : ''}</span>` : ''}
+                    <span class="condition-badge ${conditionClass}">${conditionText}${!isDisabled ? ' ' + horse.condition + '%' : ''}</span>
+                    ${!isDisabled ? `<span class="select-indicator">${isSelected ? '\u2714' : ''}</span>` : ''}
                 </div>
                 <div class="stable-card-stats">
                     <div class="mini-stat-row">
@@ -2791,11 +3398,27 @@ function renderHorseOptions() {
                         <span class="mini-stat-value">${horse.temperament}</span>
                     </div>
                 </div>
-                ${!isInjured ? `<div class="entry-suitability">
-                    <span class="suit-item">${distSuit} Trip: ${DISTANCE_PREF_LABELS[horse.distancePreference] || 'Mid'}</span>
-                    <span class="suit-item">${groundSuit} Going: ${horse.groundPreference || 'Good'}</span>
-                </div>` : ''}
-                ${warningText ? `<div class="entry-warning">${isInjured ? '' : '\u26A0\uFE0F '}${warningText}</div>` : ''}
+                ${!isDisabled ? (() => {
+                    const or = horse.officialRating;
+                    const orDisplay = or != null ? or : '--';
+                    const selectedRaceType = RaceState.selectedRace.type || 'conditions';
+                    let weightNote = '';
+                    if (selectedRaceType === 'handicap' && or != null) {
+                        weightNote = `<span class="weight-badge">Est. ${formatWeight(Math.max(112, 140 - (Math.max(...GameState.horses.filter(h => !h.isYearling && !h.isInjured).map(h => h.officialRating || 0)) - or)))}</span>`;
+                    } else {
+                        weightNote = `<span class="weight-badge">${formatWeight(126)}</span>`;
+                    }
+                    return `<div class="entry-rating-info">
+                        <span class="or-badge">OR ${orDisplay}</span>
+                        ${weightNote}
+                    </div>
+                    <div class="entry-suitability">
+                        <span class="suit-item">${distSuit} Trip: ${DISTANCE_PREF_LABELS[horse.distancePreference] || 'Mid'}</span>
+                        <span class="suit-item">${groundSuit} Going: ${horse.groundPreference || 'Good'}</span>
+                    </div>`;
+                })() : ''}
+                ${!isDisabled && RaceState.selectedRace.type === 'handicap' ? '<div class="entry-weight-note"><em>Final weights depend on all runners</em></div>' : ''}
+                ${warningText ? `<div class="entry-warning">${isDisabled ? '' : '\u26A0\uFE0F '}${warningText}</div>` : ''}
             </div>
         `;
     }).join('');
@@ -2892,6 +3515,8 @@ function startRace() {
     const totalRunners = 8;
     const runners = [];
 
+    const raceType = RaceState.selectedRace.type || 'conditions';
+
     // Add player horses
     const playerHorses = GameState.horses.filter(h => RaceState.selectedHorseIds.has(h.id));
     playerHorses.forEach(horse => {
@@ -2910,18 +3535,28 @@ function startRace() {
             silkPrimary: horse.silkPrimary || GameState.silkPrimary,
             silkSecondary: horse.silkSecondary || GameState.silkSecondary,
             distancePreference: horse.distancePreference || 'mid',
-            groundPreference: horse.groundPreference || 'Good'
+            groundPreference: horse.groundPreference || 'Good',
+            officialRating: horse.officialRating || calculateOfficialRating(horse)
         });
     });
 
-    // Fill remaining slots with AI
+    // Fill remaining slots with AI - quality varies by race type
     const aiSlots = totalRunners - runners.length;
-    const aiQualities = ['medium', 'high', 'high', 'high', 'elite', 'elite'];
+    const aiQualities = raceType === 'group'
+        ? ['high', 'high', 'elite', 'elite', 'elite', 'elite']
+        : ['medium', 'medium', 'high', 'high', 'high', 'elite'];
 
     for (let i = 0; i < aiSlots; i++) {
         const quality = aiQualities[i % aiQualities.length];
         const aiHorse = generateHorse(quality);
         const aiTrainer = GameState.competitors[i % GameState.competitors.length];
+
+        // Compute AI OR with random variance
+        let aiOR = calculateOfficialRating(aiHorse) + randomInt(-8, 8);
+        if (raceType === 'group') {
+            aiOR = Math.max(85, Math.min(115, aiOR));
+        }
+        aiOR = Math.max(0, Math.min(140, aiOR));
 
         let aiStrategy;
         if (aiHorse.speed > aiHorse.stamina && aiHorse.speed > aiHorse.acceleration) {
@@ -2948,9 +3583,13 @@ function startRace() {
             silkPrimary: aiTrainer.silkPrimary || aiHorse.silkPrimary,
             silkSecondary: aiTrainer.silkSecondary || aiHorse.silkSecondary,
             distancePreference: aiHorse.distancePreference || 'mid',
-            groundPreference: aiHorse.groundPreference || 'Good'
+            groundPreference: aiHorse.groundPreference || 'Good',
+            officialRating: aiOR
         });
     }
+
+    // Assign weights based on race type
+    assignRaceWeights(runners, raceType);
 
     RaceState.racePositions = runners;
 
@@ -3304,7 +3943,8 @@ function calculateRunnerSpeed(runner, tick) {
             break;
     }
 
-    baseSpeed = baseSpeed * form * distancePrefModifier * groundPrefModifier + variance;
+    const weightMultiplier = getWeightMultiplier(runner.weightLbs || 126, distanceFurlongs);
+    baseSpeed = baseSpeed * form * distancePrefModifier * groundPrefModifier * weightMultiplier + variance;
     return Math.max(baseSpeed, 0.2);
 }
 
@@ -3507,8 +4147,25 @@ function finishRace() {
             place: pr.finalPlace,
             prize: prize,
             points: points,
-            injury: raceInjuries[pr.id] || null
+            injury: raceInjuries[pr.id] || null,
+            weightDisplay: pr.weightDisplay || formatWeight(126),
+            officialRating: pr.officialRating || 0
         });
+    });
+
+    // Adjust official ratings after race
+    const raceType = RaceState.selectedRace.type || 'conditions';
+    const ratingChanges = adjustRatingsAfterRace(finalPositions, raceType);
+    RaceState._lastRatingChanges = ratingChanges;
+
+    // Attach rating change info to playerHorseResults
+    playerHorseResults.forEach(hr => {
+        const rc = ratingChanges.find(r => r.horseId === hr.id);
+        if (rc) {
+            hr.ratingChange = rc.change;
+            hr.newRating = rc.newRating;
+            hr.oldRating = rc.oldRating;
+        }
     });
 
     // Phase 4: Fanfare if any player horse won
@@ -3537,7 +4194,9 @@ function finishRace() {
         name: r.name,
         trainer: r.trainer,
         position: r.finalPlace,
-        isPlayer: r.isPlayer
+        isPlayer: r.isPlayer,
+        officialRating: r.officialRating || 0,
+        weightDisplay: r.weightDisplay || formatWeight(126)
     }));
 
     GameState.currentRaceIndex++;
@@ -3566,6 +4225,7 @@ function showRaceResults(positions, bestPlace, totalPrizeMoney, points, playerHo
                 ${swatch}
                 <div class="podium-horse">${runner.name}</div>
                 <div class="podium-trainer">${runner.trainer}</div>
+                <div class="weight-badge">${runner.weightDisplay || formatWeight(126)}</div>
             </div>
         `;
     }).join('');
@@ -3599,9 +4259,16 @@ function showRaceResults(positions, bestPlace, totalPrizeMoney, points, playerHo
             </div>`;
         }
         const prizeText = hr.prize > 0 ? ` \u2014 \u00A3${formatMoney(hr.prize)}` : '';
+        let ratingLine = '';
+        if (hr.ratingChange !== undefined) {
+            const changeClass = hr.ratingChange > 0 ? 'rating-up' : hr.ratingChange < 0 ? 'rating-down' : 'rating-same';
+            const changeSign = hr.ratingChange > 0 ? '+' : '';
+            ratingLine = `<p class="${changeClass}"><span class="weight-badge">${hr.weightDisplay}</span> OR ${hr.oldRating} \u2192 ${hr.newRating} (${changeSign}${hr.ratingChange})</p>`;
+        }
         return `
             <div class="player-horse-result">
                 <p>${hr.name}: <strong>${getOrdinal(hr.place)} place</strong>${prizeText} (+${hr.points} pts)</p>
+                ${ratingLine}
                 ${injuryLine}
             </div>
         `;
@@ -3639,6 +4306,22 @@ function showBetweenRaces(trainingData) {
     document.getElementById('between-season').textContent = GameState.season;
 
     let html = '';
+
+    // Tattersalls Sale section - at the top if any horses are listed for sale
+    const pendingSaleHorses = GameState.horses.filter(h => h.pendingAuction);
+    console.log('[BetweenRaces] Pending sale horses:', pendingSaleHorses.length, GameState.horses.map(h => ({name: h.name, pending: h.pendingAuction})));
+    if (pendingSaleHorses.length > 0) {
+        html += '<div class="between-section selling-auction-section" style="border-left: 4px solid var(--color-secondary); background: rgba(201,162,39,0.06);"><h3>\u{1F3F7}\uFE0F Tattersalls Sale</h3>';
+        html += '<p style="margin-bottom: var(--space-md); color: var(--color-text-light);">The following horses are entered in the upcoming sale:</p>';
+        pendingSaleHorses.forEach(horse => {
+            html += `<div class="selling-preview-item">
+                <span class="horse-name">${horse.name}</span>
+                <span class="reserve-info">Reserve: \u00A3${formatMoney(horse.reservePrice)}</span>
+            </div>`;
+        });
+        html += `<button class="btn btn-primary" style="margin-top: var(--space-md); width: 100%;" onclick="runSellingAuction()">Watch the Sale</button>`;
+        html += '</div>';
+    }
 
     // Training report
     html += '<div class="between-section"><h3>Training Report</h3>';
@@ -3686,16 +4369,33 @@ function showBetweenRaces(trainingData) {
         html += '</div>';
     }
 
+    // Handicapper's Report - show OR changes for horses that raced
+    if (RaceState._lastRatingChanges && RaceState._lastRatingChanges.length > 0) {
+        html += '<div class="between-section"><h3>Handicapper\'s Report</h3>';
+        RaceState._lastRatingChanges.forEach(rc => {
+            const changeClass = rc.change > 0 ? 'rating-up' : rc.change < 0 ? 'rating-down' : 'rating-same';
+            const arrow = rc.change > 0 ? '\u2191' : rc.change < 0 ? '\u2193' : '\u2192';
+            const changeSign = rc.change > 0 ? '+' : '';
+            html += `<div class="rating-change-item">
+                <span class="rating-change-horse">${rc.horseName}</span>
+                <span class="${changeClass}">${arrow} ${rc.oldRating} \u2192 ${rc.newRating} (${changeSign}${rc.change})</span>
+            </div>`;
+        });
+        html += '</div>';
+    }
+
     // Next race preview
     const nextRace = GameState.races[GameState.currentRaceIndex];
     if (nextRace) {
         const cat = getRaceDistanceCategory(nextRace.distanceFurlongs);
         const catLabel = {'sprint': 'Sprint', 'mid': 'Mid', 'stayer': 'Stayer'}[cat];
         const groundText = nextRace.ground || 'Good';
+        const nextRaceType = nextRace.type || 'conditions';
+        const nextTypeBadge = `<span class="race-type-badge ${nextRaceType}">${nextRaceType === 'handicap' ? 'Handicap' : nextRaceType === 'group' ? 'Group Race' : 'Conditions'}</span>`;
         html += `<div class="between-section">
             <h3>Next Race</h3>
             <div class="next-race-preview">
-                <div class="race-name">${nextRace.name}</div>
+                <div class="race-name">${nextRace.name} ${nextTypeBadge}</div>
                 <div class="race-details">
                     ${nextRace.distance}
                     <span class="distance-category ${cat}">${catLabel}</span>
@@ -3872,6 +4572,21 @@ function showSeasonCeremony() {
         html += '</div>';
     }
 
+    // Tattersalls Sale at season end - if any horses are listed for sale
+    const pendingSaleHorses = GameState.horses.filter(h => h.pendingAuction);
+    if (pendingSaleHorses.length > 0) {
+        html += '<div class="ceremony-aging selling-auction-section"><h3>Tattersalls End-of-Season Sale</h3>';
+        html += '<p style="margin-bottom: var(--space-md);">The following horses are entered in the sale:</p>';
+        pendingSaleHorses.forEach(horse => {
+            html += `<div class="selling-preview-item">
+                <span class="horse-name">${horse.name}</span>
+                <span class="reserve-info">Reserve: \u00A3${formatMoney(horse.reservePrice)}</span>
+            </div>`;
+        });
+        html += `<button class="btn btn-primary" style="margin-top: var(--space-md); width: 100%;" onclick="runSellingAuction()">Watch the Sale</button>`;
+        html += '</div>';
+    }
+
     html += `<button class="btn btn-primary" onclick="startNextSeason()">Continue to Season ${GameState.season + 1}</button>`;
 
     document.getElementById('ceremony-content').innerHTML = html;
@@ -3888,7 +4603,797 @@ function startNextSeason() {
         h.racesRun = 0;
         h.wins = 0;
         h.totalEarnings = 0;
+        h.pendingAuction = false;
+        h.reservePrice = 0;
     });
+
+    updateDashboard();
+    showScreen('dashboard');
+}
+
+// ============================================
+// THE YARD - Isometric Walkable Training Yard
+// ============================================
+
+const YARD_COLS = 20;
+const YARD_ROWS = 16;
+const TILE_W = 64;
+const TILE_H = 32;
+const YARD_ORIGIN_X = 640;
+const YARD_ORIGIN_Y = 40;
+
+// Tile types: 0=grass, 1=path, 2=cobble, 3=dirt, 4=paddock, 5=fence, 6=solid, 7=gate
+const YARD_TILE_NAMES = ['grass','path','cobble','dirt','paddock','fence','solid','gate'];
+
+// Yard layout map: row-major [row][col]
+const YARD_MAP = [
+    [5,5,5,5,5,5,5,0,0,0,0,0,5,5,5,5,5,5,5,5],
+    [5,4,4,4,4,4,5,0,0,0,0,0,5,3,3,3,3,3,5,0],
+    [5,4,4,4,4,4,5,0,0,0,0,0,5,3,3,3,3,3,5,0],
+    [5,4,4,4,4,4,5,0,0,0,0,0,5,3,3,3,3,3,5,0],
+    [5,5,5,5,5,5,5,0,0,0,0,0,5,5,5,5,5,5,5,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [0,0,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,0,0],
+    [0,0,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,0,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+    [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+    [2,2,6,6,6,2,6,6,6,2,2,1,1,1,2,6,6,6,6,2],
+    [2,2,6,6,6,2,6,6,6,2,2,1,1,1,2,6,6,6,6,2],
+    [2,2,2,2,2,2,2,2,2,2,2,1,1,1,2,2,2,2,2,2],
+    [5,5,5,5,5,5,5,5,5,7,7,7,7,5,5,5,5,5,5,5],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+
+// Walkable check: 0=grass, 1=path, 2=cobble, 3=dirt, 4=paddock are walkable; 5=fence, 6=solid blocked; 7=gate=interactable+walkable
+function isWalkable(r, c) {
+    if (r < 0 || r >= YARD_ROWS || c < 0 || c >= YARD_COLS) return false;
+    const t = YARD_MAP[r][c];
+    return t !== 5 && t !== 6;
+}
+
+// Buildings definition: { id, type, label, gridR, gridC, gridW, gridH, wallH }
+const YARD_BUILDINGS = [
+    { id: 'stable',  type: 'stable',  label: 'Stables',       gridR: 6, gridC: 2, gridW: 16, gridH: 2, wallH: 48 },
+    { id: 'tack',    type: 'tack',    label: 'Tack Room',     gridR: 11, gridC: 2, gridW: 3, gridH: 2, wallH: 36 },
+    { id: 'feed',    type: 'feed',    label: 'Feed Store',    gridR: 11, gridC: 6, gridW: 3, gridH: 2, wallH: 36 },
+    { id: 'office',  type: 'office',  label: 'Office',        gridR: 11, gridC: 15, gridW: 4, gridH: 2, wallH: 40 },
+    { id: 'ring',    type: 'ring',    label: 'Training Ring', gridR: 1, gridC: 13, gridW: 5, gridH: 3, wallH: 4 },
+    { id: 'paddock', type: 'paddock-area', label: 'Paddock',  gridR: 1, gridC: 1, gridW: 5, gridH: 3, wallH: 4 },
+];
+
+// Stall positions (row=8 = south face of stable, 6 stalls)
+const YARD_STALLS = [
+    { idx: 0, gridR: 8, gridC: 3 },
+    { idx: 1, gridR: 8, gridC: 5 },
+    { idx: 2, gridR: 8, gridC: 7 },
+    { idx: 3, gridR: 8, gridC: 10 },
+    { idx: 4, gridR: 8, gridC: 12 },
+    { idx: 5, gridR: 8, gridC: 14 },
+];
+
+// Interactable spots: { id, gridR, gridC, prompt, handler }
+const YARD_INTERACTABLES = [
+    // Stall doors - generated dynamically
+    { id: 'tack',    gridR: 11, gridC: 3, prompt: 'Look in Tack Room',   handler: 'tack' },
+    { id: 'tack2',   gridR: 11, gridC: 4, prompt: 'Look in Tack Room',   handler: 'tack' },
+    { id: 'feed',    gridR: 11, gridC: 7, prompt: 'Look in Feed Store',   handler: 'feed' },
+    { id: 'feed2',   gridR: 11, gridC: 8, prompt: 'Look in Feed Store',   handler: 'feed' },
+    { id: 'office',  gridR: 11, gridC: 16, prompt: 'Enter Office',        handler: 'office' },
+    { id: 'office2', gridR: 11, gridC: 17, prompt: 'Enter Office',        handler: 'office' },
+    { id: 'ring',    gridR: 4, gridC: 14, prompt: 'Watch Training Ring',  handler: 'ring' },
+    { id: 'ring2',   gridR: 4, gridC: 15, prompt: 'Watch Training Ring',  handler: 'ring' },
+    { id: 'paddock', gridR: 4, gridC: 2,  prompt: 'Look at Paddock',      handler: 'paddock' },
+    { id: 'paddock2',gridR: 4, gridC: 3,  prompt: 'Look at Paddock',      handler: 'paddock' },
+    { id: 'gate',    gridR: 14, gridC: 10, prompt: 'Leave the Yard',      handler: 'gate' },
+    { id: 'gate2',   gridR: 14, gridC: 11, prompt: 'Leave the Yard',      handler: 'gate' },
+];
+
+const YardState = {
+    active: false,
+    playerR: 9,
+    playerC: 10,
+    facing: 'down',
+    openDoors: {},     // stallIdx -> true
+    keyHandler: null,
+    keyUpHandler: null,
+    walkingTimeout: null,
+    panelOpen: false,
+};
+
+function yardIsoX(c, r) {
+    return (c - r) * (TILE_W / 2) + YARD_ORIGIN_X;
+}
+
+function yardIsoY(c, r) {
+    return (c + r) * (TILE_H / 2) + YARD_ORIGIN_Y;
+}
+
+function yardIsoZ(c, r) {
+    return c + r;
+}
+
+function buildYardTiles() {
+    const world = document.getElementById('yard-world');
+    let tilesHTML = '';
+    for (let r = 0; r < YARD_ROWS; r++) {
+        for (let c = 0; c < YARD_COLS; c++) {
+            const t = YARD_MAP[r][c];
+            if (t === 6) continue; // solid = building occupies
+            const tName = YARD_TILE_NAMES[t] || 'grass';
+            const x = yardIsoX(c, r);
+            const y = yardIsoY(c, r);
+            const z = yardIsoZ(c, r);
+            tilesHTML += `<div class="yard-tile ${tName}" style="left:${x}px;top:${y}px;z-index:${z};"></div>`;
+        }
+    }
+    world.innerHTML = tilesHTML;
+}
+
+function buildYardBuildings() {
+    const world = document.getElementById('yard-world');
+
+    YARD_BUILDINGS.forEach(bldg => {
+        const el = document.createElement('div');
+        el.className = `yard-building ${bldg.type}`;
+        el.dataset.id = bldg.id;
+
+        // Top face position (isometric diamond)
+        const topX = yardIsoX(bldg.gridC, bldg.gridR);
+        const topY = yardIsoY(bldg.gridC, bldg.gridR);
+        const topW = bldg.gridW * (TILE_W / 2) + bldg.gridH * (TILE_W / 2);
+        const topH = bldg.gridW * (TILE_H / 2) + bldg.gridH * (TILE_H / 2);
+
+        el.style.left = topX + 'px';
+        el.style.top = (topY - bldg.wallH) + 'px';
+        el.style.zIndex = yardIsoZ(bldg.gridC + bldg.gridW, bldg.gridR + bldg.gridH) + 1;
+
+        // Top face
+        const top = document.createElement('div');
+        top.className = 'bldg-top';
+        top.style.width = topW + 'px';
+        top.style.height = topH + 'px';
+        top.style.left = '0px';
+        top.style.top = '0px';
+        el.appendChild(top);
+
+        // Left face (front-left wall)
+        if (bldg.wallH > 8) {
+            const leftW = bldg.gridH * (TILE_W / 2);
+            const left = document.createElement('div');
+            left.className = 'bldg-left';
+            left.style.width = leftW + 'px';
+            left.style.height = bldg.wallH + 'px';
+            left.style.left = '0px';
+            left.style.top = (topH / 2) + 'px';
+            el.appendChild(left);
+
+            // Right face (front-right wall)
+            const rightW = bldg.gridW * (TILE_W / 2);
+            const right = document.createElement('div');
+            right.className = 'bldg-right';
+            right.style.width = rightW + 'px';
+            right.style.height = bldg.wallH + 'px';
+            right.style.left = (topW / 2) + 'px';
+            right.style.top = (topH / 2) + 'px';
+            el.appendChild(right);
+        }
+
+        // Label
+        const label = document.createElement('div');
+        label.className = 'yard-building-label';
+        label.textContent = bldg.label;
+        label.style.left = (topW / 2 - 20) + 'px';
+        label.style.top = (bldg.wallH > 8 ? -14 : topH / 2 - 8) + 'px';
+        el.appendChild(label);
+
+        world.appendChild(el);
+    });
+}
+
+function buildYardStalls() {
+    const world = document.getElementById('yard-world');
+
+    YARD_STALLS.forEach((stall, idx) => {
+        const x = yardIsoX(stall.gridC, stall.gridR);
+        const y = yardIsoY(stall.gridC, stall.gridR);
+        const z = yardIsoZ(stall.gridC, stall.gridR) + 5;
+
+        // Door element
+        const door = document.createElement('div');
+        door.className = 'yard-stall-door';
+        door.dataset.stallIdx = idx;
+        door.style.left = (x + 22) + 'px';
+        door.style.top = (y - 14) + 'px';
+        door.style.zIndex = z;
+        world.appendChild(door);
+
+        // Horse inside (hidden until door opens)
+        const horseInside = document.createElement('div');
+        horseInside.className = 'yard-stall-horse';
+        horseInside.dataset.stallIdx = idx;
+        horseInside.style.left = (x + 17) + 'px';
+        horseInside.style.top = (y - 24) + 'px';
+        horseInside.style.zIndex = z - 1;
+        world.appendChild(horseInside);
+
+        // Name plate above occupied stalls
+        const horses = GameState.horses.filter(h => !h.isYearling);
+        if (idx < horses.length) {
+            const plate = document.createElement('div');
+            plate.className = 'yard-stall-nameplate';
+            plate.textContent = horses[idx].name;
+            plate.style.left = (x + 16) + 'px';
+            plate.style.top = (y - 32) + 'px';
+            plate.style.zIndex = z + 1;
+            world.appendChild(plate);
+        }
+    });
+}
+
+function placeHorsesInStalls() {
+    const horses = GameState.horses.filter(h => !h.isYearling);
+    YARD_STALLS.forEach((stall, idx) => {
+        const horseEl = document.querySelector(`.yard-stall-horse[data-stall-idx="${idx}"]`);
+        if (!horseEl) return;
+        if (idx < horses.length) {
+            const h = horses[idx];
+            const body = h.silkPrimary || '#6b3a1f';
+            const accent = h.silkSecondary || '#5a2e16';
+            horseEl.innerHTML = `<svg viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg" style="width:30px;height:20px;">
+                <!-- Body -->
+                <path d="M12,22 Q9,18 9,14 Q9,10 14,10 L30,9 Q34,7 37,4 Q39,2 42,2 Q46,1.5 47,3 Q49,3.5 50,6 Q50.5,8 49,9 L44,14 Q42,17 40,21 L38,24 Q28,20 16,24 Z" fill="${body}"/>
+                <!-- Mane -->
+                <path d="M36,5 Q34,3 33,6 Q31,4 30,7 Q28,5.5 27,8 Q26,7 25,9.5" stroke="${accent}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+                <!-- Tail -->
+                <path d="M12,22 Q8,20 6,22 Q4,25 7,27 Q5,28 6,30" stroke="${accent}" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+                <!-- Front legs -->
+                <line x1="34" y1="23" x2="35" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+                <line x1="30" y1="23" x2="31" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+                <!-- Back legs -->
+                <line x1="20" y1="24" x2="19" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+                <line x1="16" y1="24" x2="15" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+                <!-- Hooves -->
+                <rect x="34" y="31" width="2.5" height="2" rx="0.5" fill="#333"/>
+                <rect x="30" y="31" width="2.5" height="2" rx="0.5" fill="#333"/>
+                <rect x="18" y="31" width="2.5" height="2" rx="0.5" fill="#333"/>
+                <rect x="14" y="31" width="2.5" height="2" rx="0.5" fill="#333"/>
+                <!-- Eye -->
+                <circle cx="47" cy="4.5" r="1" fill="#222"/>
+                <circle cx="47.3" cy="4.2" r="0.3" fill="#fff"/>
+                <!-- Ears -->
+                <polygon points="44,2 42,0 44,1" fill="${accent}"/>
+                <polygon points="46,1.5 44.5,0 46.5,0.8" fill="${accent}"/>
+                <!-- Nostril -->
+                <circle cx="50" cy="7" r="0.5" fill="#3a1a0a"/>
+            </svg>`;
+        } else {
+            horseEl.innerHTML = '';
+        }
+    });
+
+    // Add stall interactables
+    YARD_STALLS.forEach((stall, idx) => {
+        // Interactable on the row in front of the stall (row 8 is stall, player stands on row 8 path)
+        if (!YARD_INTERACTABLES.find(ia => ia.id === `stall${idx}`)) {
+            YARD_INTERACTABLES.push({
+                id: `stall${idx}`,
+                gridR: stall.gridR,
+                gridC: stall.gridC,
+                prompt: idx < GameState.horses.filter(h => !h.isYearling).length ? 'Open stable door' : 'Empty stall',
+                handler: 'stall',
+                stallIdx: idx
+            });
+        }
+    });
+}
+
+function placeYardExtras() {
+    const world = document.getElementById('yard-world');
+
+    // Yearlings in paddock
+    const yearlings = GameState.horses.filter(h => h.isYearling);
+    yearlings.slice(0, 3).forEach((h, i) => {
+        const pr = 2 + Math.floor(i / 2);
+        const pc = 2 + (i % 3);
+        const x = yardIsoX(pc, pr);
+        const y = yardIsoY(pc, pr);
+        const el = document.createElement('div');
+        el.className = 'yard-grazing-horse';
+        el.style.left = (x + 10 + i * 8) + 'px';
+        el.style.top = (y - 6) + 'px';
+        el.style.zIndex = yardIsoZ(pc, pr) + 2;
+        el.innerHTML = `<svg viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg">
+            <!-- Grazing body - head lowered -->
+            <path d="M12,20 Q9,17 9,13 Q9,9 14,9 L30,8 Q34,9 38,12 Q40,14 42,18 L44,22 Q48,24 50,28 L48,29 Q44,26 40,24 Q32,20 16,24 Z" fill="#8b6a4a"/>
+            <!-- Mane -->
+            <path d="M34,10 Q32,8 31,11 Q29,9 28,12" stroke="#6b4a2a" stroke-width="1" fill="none" stroke-linecap="round"/>
+            <!-- Tail -->
+            <path d="M12,20 Q8,18 6,20 Q4,23 7,25" stroke="#6b4a2a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <!-- Legs -->
+            <line x1="34" y1="22" x2="35" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
+            <line x1="30" y1="22" x2="31" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
+            <line x1="20" y1="23" x2="19" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
+            <line x1="16" y1="23" x2="15" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
+            <!-- Hooves -->
+            <rect x="34" y="29" width="2" height="1.5" rx="0.5" fill="#333"/>
+            <rect x="30" y="29" width="2" height="1.5" rx="0.5" fill="#333"/>
+            <rect x="18" y="29" width="2" height="1.5" rx="0.5" fill="#333"/>
+            <rect x="14" y="29" width="2" height="1.5" rx="0.5" fill="#333"/>
+            <!-- Eye -->
+            <circle cx="46" cy="25" r="0.7" fill="#222"/>
+            <!-- Ear -->
+            <polygon points="42,17 40,15 42.5,16" fill="#7b5a3a"/>
+        </svg>`;
+        world.appendChild(el);
+    });
+
+    // Horses in training ring
+    const trainingHorses = GameState.horses.filter(h => h.trainingFocus && !h.isYearling);
+    trainingHorses.slice(0, 2).forEach((h, i) => {
+        const pr = 2 + i;
+        const pc = 14 + i;
+        const x = yardIsoX(pc, pr);
+        const y = yardIsoY(pc, pr);
+        const el = document.createElement('div');
+        el.className = 'yard-training-horse trotting';
+        el.style.left = (x + 10) + 'px';
+        el.style.top = (y - 4) + 'px';
+        el.style.zIndex = yardIsoZ(pc, pr) + 2;
+        const tBody = h.silkPrimary || '#6b3a1f';
+        const tAccent = h.silkSecondary || '#5a2e16';
+        el.innerHTML = `<svg viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg">
+            <!-- Trotting body -->
+            <path d="M12,22 Q9,18 9,14 Q9,10 14,10 L30,9 Q34,7 37,4 Q39,2 42,2 Q46,1.5 47,3 Q49,3.5 50,6 Q50.5,8 49,9 L44,14 Q42,17 40,21 L38,24 Q28,20 16,24 Z" fill="${tBody}"/>
+            <!-- Mane -->
+            <path d="M36,5 Q34,3 33,6 Q31,4.5 30,7" stroke="${tAccent}" stroke-width="1" fill="none" stroke-linecap="round"/>
+            <!-- Tail -->
+            <path d="M12,22 Q8,20 7,23 Q6,25 8,26" stroke="${tAccent}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <!-- Legs (trotting pose) -->
+            <line x1="34" y1="23" x2="37" y2="31" stroke="${tBody}" stroke-width="2" stroke-linecap="round"/>
+            <line x1="30" y1="23" x2="28" y2="31" stroke="${tBody}" stroke-width="2" stroke-linecap="round"/>
+            <line x1="20" y1="24" x2="22" y2="31" stroke="${tBody}" stroke-width="2" stroke-linecap="round"/>
+            <line x1="16" y1="24" x2="13" y2="31" stroke="${tBody}" stroke-width="2" stroke-linecap="round"/>
+            <!-- Hooves -->
+            <rect x="36" y="30" width="2" height="1.5" rx="0.5" fill="#333"/>
+            <rect x="27" y="30" width="2" height="1.5" rx="0.5" fill="#333"/>
+            <rect x="21" y="30" width="2" height="1.5" rx="0.5" fill="#333"/>
+            <rect x="12" y="30" width="2" height="1.5" rx="0.5" fill="#333"/>
+            <!-- Eye -->
+            <circle cx="47" cy="4.5" r="0.8" fill="#222"/>
+            <!-- Ear -->
+            <polygon points="44,2 42.5,0 44.5,1" fill="${tAccent}"/>
+        </svg>`;
+        world.appendChild(el);
+    });
+
+    // --- Environmental Decorations ---
+
+    // Trees along grass edges
+    const treeDefs = [
+        { r: 0, c: 8, scale: 1.0 },
+        { r: 0, c: 10, scale: 0.85 },
+        { r: 15, c: 2, scale: 0.9 },
+    ];
+    treeDefs.forEach(t => {
+        const x = yardIsoX(t.c, t.r);
+        const y = yardIsoY(t.c, t.r);
+        const el = document.createElement('div');
+        el.className = 'yard-decoration';
+        el.style.left = (x + 10) + 'px';
+        el.style.top = (y - 50 * t.scale) + 'px';
+        el.style.zIndex = yardIsoZ(t.c, t.r) + 3;
+        const s = t.scale;
+        el.innerHTML = `<svg viewBox="0 0 40 60" width="${40*s}" height="${60*s}" xmlns="http://www.w3.org/2000/svg">
+            <rect x="17" y="35" width="6" height="25" rx="2" fill="#6b4226"/>
+            <path d="M1,36 Q4,28 8,24 Q12,18 14,10 Q16,4 20,2 Q24,4 26,10 Q28,18 32,24 Q36,28 39,36 Q30,40 20,40 Q10,40 1,36 Z" fill="#3a7a28"/>
+            <path d="M6,34 Q10,26 14,20 Q17,12 20,8 Q23,12 26,20 Q30,26 34,34 Q27,37 20,37 Q13,37 6,34 Z" fill="#4a8a34" opacity="0.7"/>
+        </svg>`;
+        world.appendChild(el);
+    });
+
+    // Hay bales near feed store
+    const hayDefs = [
+        { r: 13, c: 6, rot: 0 },
+        { r: 13, c: 7, rot: 15 },
+    ];
+    hayDefs.forEach(h => {
+        const x = yardIsoX(h.c, h.r);
+        const y = yardIsoY(h.c, h.r);
+        const el = document.createElement('div');
+        el.className = 'yard-decoration';
+        el.style.left = (x + 14) + 'px';
+        el.style.top = (y - 10) + 'px';
+        el.style.zIndex = yardIsoZ(h.c, h.r) + 3;
+        el.innerHTML = `<svg viewBox="0 0 20 14" width="20" height="14" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${h.rot}deg)">
+            <rect x="1" y="2" width="18" height="10" rx="2" fill="#c8a84e"/>
+            <line x1="4" y1="2" x2="4" y2="12" stroke="#b09030" stroke-width="0.5"/>
+            <line x1="10" y1="2" x2="10" y2="12" stroke="#b09030" stroke-width="0.5"/>
+            <line x1="16" y1="2" x2="16" y2="12" stroke="#b09030" stroke-width="0.5"/>
+            <rect x="1" y="2" width="18" height="10" rx="2" fill="none" stroke="#a08028" stroke-width="0.8"/>
+        </svg>`;
+        world.appendChild(el);
+    });
+
+    // Water trough near stables
+    const troughX = yardIsoX(16, 8);
+    const troughY = yardIsoY(16, 8);
+    const trough = document.createElement('div');
+    trough.className = 'yard-decoration';
+    trough.style.left = (troughX + 12) + 'px';
+    trough.style.top = (troughY - 8) + 'px';
+    trough.style.zIndex = yardIsoZ(16, 8) + 3;
+    trough.innerHTML = `<svg viewBox="0 0 28 14" width="28" height="14" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="3" width="26" height="10" rx="2" fill="#7a6a5a"/>
+        <rect x="2" y="4" width="24" height="8" rx="1.5" fill="#5a8ab0"/>
+        <rect x="2" y="4" width="24" height="3" rx="1" fill="rgba(255,255,255,0.15)"/>
+        <rect x="0" y="2" width="3" height="12" rx="1" fill="#6a5a4a"/>
+        <rect x="25" y="2" width="3" height="12" rx="1" fill="#6a5a4a"/>
+    </svg>`;
+    world.appendChild(trough);
+
+    // Flower boxes on the office
+    const flowerX = yardIsoX(16, 11);
+    const flowerY = yardIsoY(16, 11);
+    const flowers = document.createElement('div');
+    flowers.className = 'yard-decoration';
+    flowers.style.left = (flowerX + 20) + 'px';
+    flowers.style.top = (flowerY - 48) + 'px';
+    flowers.style.zIndex = yardIsoZ(16, 11) + 4;
+    flowers.innerHTML = `<svg viewBox="0 0 24 16" width="24" height="16" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="9" width="20" height="6" rx="1" fill="#6b4226"/>
+        <rect x="3" y="10" width="18" height="4" rx="0.5" fill="#5a3518"/>
+        <circle cx="5" cy="7" r="2.5" fill="#e84040"/>
+        <circle cx="9" cy="6" r="2" fill="#e8d040"/>
+        <circle cx="14" cy="7" r="2.5" fill="#d050a0"/>
+        <circle cx="19" cy="6" r="2" fill="#e84040"/>
+        <line x1="5" y1="9" x2="5" y2="7" stroke="#3a8020" stroke-width="0.8"/>
+        <line x1="9" y1="9" x2="9" y2="6" stroke="#3a8020" stroke-width="0.8"/>
+        <line x1="14" y1="9" x2="14" y2="7" stroke="#3a8020" stroke-width="0.8"/>
+        <line x1="19" y1="9" x2="19" y2="6" stroke="#3a8020" stroke-width="0.8"/>
+    </svg>`;
+    world.appendChild(flowers);
+
+    // Wheelbarrow near tack room
+    const wbX = yardIsoX(5, 13);
+    const wbY = yardIsoY(5, 13);
+    const wheelbarrow = document.createElement('div');
+    wheelbarrow.className = 'yard-decoration';
+    wheelbarrow.style.left = (wbX + 12) + 'px';
+    wheelbarrow.style.top = (wbY - 12) + 'px';
+    wheelbarrow.style.zIndex = yardIsoZ(5, 13) + 3;
+    wheelbarrow.innerHTML = `<svg viewBox="0 0 30 20" width="26" height="18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6,8 L12,4 L26,4 L28,10 L8,14 Z" fill="#7a8a7a" stroke="#5a6a5a" stroke-width="0.8"/>
+        <path d="M8,14 L6,8 L4,10" stroke="#6a5a4a" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M28,10 L26,14" stroke="#6a5a4a" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <circle cx="4" cy="14" r="3" fill="none" stroke="#5a4a3a" stroke-width="1.5"/>
+        <circle cx="4" cy="14" r="0.8" fill="#5a4a3a"/>
+    </svg>`;
+    world.appendChild(wheelbarrow);
+
+    // Weathervane on stable roof
+    const wvX = yardIsoX(9, 6);
+    const wvY = yardIsoY(9, 6);
+    const weathervane = document.createElement('div');
+    weathervane.className = 'yard-decoration';
+    weathervane.style.left = (wvX + 28) + 'px';
+    weathervane.style.top = (wvY - 68) + 'px';
+    weathervane.style.zIndex = yardIsoZ(9, 6) + 6;
+    weathervane.innerHTML = `<svg viewBox="0 0 24 30" width="18" height="24" xmlns="http://www.w3.org/2000/svg">
+        <line x1="12" y1="30" x2="12" y2="6" stroke="#444" stroke-width="1.2"/>
+        <line x1="4" y1="10" x2="20" y2="10" stroke="#444" stroke-width="0.8"/>
+        <text x="3" y="9" font-size="4" fill="#444" font-weight="bold">W</text>
+        <text x="18" y="9" font-size="4" fill="#444" font-weight="bold">E</text>
+        <!-- Horse silhouette -->
+        <path d="M7,6 Q8,3 10,2 Q11,1 12,1 Q13,1.5 14,3 Q15,2 16,2 Q17,2.5 17,4 Q16,5 14,5.5 L10,6 Q8,6.5 7,6 Z" fill="#444"/>
+        <polygon points="20,6 17,5 17,7" fill="#444"/>
+    </svg>`;
+    world.appendChild(weathervane);
+}
+
+function updatePlayerPosition() {
+    const player = document.getElementById('yard-player');
+    const x = yardIsoX(YardState.playerC, YardState.playerR);
+    const y = yardIsoY(YardState.playerC, YardState.playerR);
+    player.style.left = (x + 20) + 'px';
+    player.style.top = (y - 20) + 'px';
+    player.style.zIndex = yardIsoZ(YardState.playerC, YardState.playerR) + 10;
+
+    // Set silk colours on player
+    player.style.setProperty('--silk-primary', GameState.silkPrimary);
+    player.style.setProperty('--silk-secondary', GameState.silkSecondary);
+}
+
+function updateYardCamera() {
+    const viewport = document.querySelector('.yard-viewport');
+    if (!viewport) return;
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+    const px = yardIsoX(YardState.playerC, YardState.playerR) + 32;
+    const py = yardIsoY(YardState.playerC, YardState.playerR) + 16;
+    const tx = vw / 2 - px;
+    const ty = vh / 2 - py;
+    const world = document.getElementById('yard-world');
+    world.style.transform = `translate(${tx}px, ${ty}px)`;
+}
+
+function checkYardInteractable() {
+    const prompt = document.getElementById('yard-interact-prompt');
+    const pr = YardState.playerR;
+    const pc = YardState.playerC;
+
+    // Check adjacent + current tile
+    const checkPositions = [
+        { r: pr, c: pc },
+        { r: pr - 1, c: pc },
+        { r: pr + 1, c: pc },
+        { r: pr, c: pc - 1 },
+        { r: pr, c: pc + 1 },
+    ];
+
+    for (const pos of checkPositions) {
+        const ia = YARD_INTERACTABLES.find(i => i.gridR === pos.r && i.gridC === pos.c);
+        if (ia) {
+            const x = yardIsoX(YardState.playerC, YardState.playerR);
+            const y = yardIsoY(YardState.playerC, YardState.playerR);
+            prompt.style.left = (x + 10) + 'px';
+            prompt.style.top = (y - 40) + 'px';
+            prompt.style.zIndex = 60;
+            document.getElementById('yard-prompt-text').textContent = ia.prompt;
+            prompt.style.display = 'flex';
+            YardState._currentInteractable = ia;
+            return;
+        }
+    }
+
+    prompt.style.display = 'none';
+    YardState._currentInteractable = null;
+}
+
+function moveYardPlayer(dr, dc) {
+    if (YardState.panelOpen) return;
+    const nr = YardState.playerR + dr;
+    const nc = YardState.playerC + dc;
+    if (!isWalkable(nr, nc)) return;
+
+    YardState.playerR = nr;
+    YardState.playerC = nc;
+
+    // Walking animation
+    const player = document.getElementById('yard-player');
+    player.classList.add('walking');
+    clearTimeout(YardState.walkingTimeout);
+    YardState.walkingTimeout = setTimeout(() => player.classList.remove('walking'), 400);
+
+    updatePlayerPosition();
+    updateYardCamera();
+    checkYardInteractable();
+}
+
+function interactAtPlayer() {
+    const ia = YardState._currentInteractable;
+    if (!ia) return;
+
+    switch (ia.handler) {
+        case 'stall': handleStallInteract(ia); break;
+        case 'tack': handleTackInteract(); break;
+        case 'feed': handleFeedInteract(); break;
+        case 'office': handleOfficeInteract(); break;
+        case 'ring': handleRingInteract(); break;
+        case 'paddock': handlePaddockInteract(); break;
+        case 'gate': exitYard(); break;
+    }
+}
+
+function handleStallInteract(ia) {
+    const idx = ia.stallIdx;
+    const horses = GameState.horses.filter(h => !h.isYearling);
+
+    // Toggle door
+    const door = document.querySelector(`.yard-stall-door[data-stall-idx="${idx}"]`);
+    if (door) {
+        if (door.classList.contains('open')) {
+            door.classList.remove('open');
+            YardState.openDoors[idx] = false;
+            closeYardPanel();
+            return;
+        }
+        door.classList.add('open');
+        YardState.openDoors[idx] = true;
+    }
+
+    if (idx >= horses.length) {
+        showYardPanel('<h3>Empty Stall</h3><p>This stall is unoccupied. Buy more horses at Tattersalls!</p>');
+        return;
+    }
+
+    const h = horses[idx];
+    const condClass = h.condition >= 70 ? 'color:var(--color-success)' : h.condition >= 40 ? 'color:var(--color-warning)' : 'color:var(--color-danger)';
+    const trainingText = h.trainingFocus ? capitalizeFirst(h.trainingFocus) : 'None';
+
+    showYardPanel(`
+        <h3>${h.name}</h3>
+        <div class="yard-horse-info">
+            <div>
+                <span style="font-size:0.85rem;color:var(--color-text-light)">${h.age} yrs · OR ${h.officialRating || '--'}</span>
+            </div>
+        </div>
+        <div class="yard-stat-row"><span class="stat-label">Speed</span><span class="stat-value">${h.speed}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Stamina</span><span class="stat-value">${h.stamina}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Acceleration</span><span class="stat-value">${h.acceleration}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Temperament</span><span class="stat-value">${h.temperament}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Condition</span><span class="stat-value" style="${condClass}">${h.condition}%</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Training</span><span class="stat-value">${trainingText}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Wins / Races</span><span class="stat-value">${h.wins} / ${h.racesRun}</span></div>
+        ${h.isInjured ? `<p style="color:var(--color-danger);margin-top:var(--space-sm);">Injured: ${h.injuryType} (${h.recoveryRacesLeft} races left)</p>` : ''}
+    `);
+}
+
+function handleTackInteract() {
+    const count = GameState.horses.length;
+    showYardPanel(`
+        <h3>Tack Room</h3>
+        <p>Saddles hung neatly on racks, bridles polished and ready.</p>
+        <div class="yard-stat-row"><span class="stat-label">Saddles</span><span class="stat-value">${count}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Bridles</span><span class="stat-value">${count}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Horse Rugs</span><span class="stat-value">${count * 2}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Girths</span><span class="stat-value">${count}</span></div>
+        <p style="margin-top:var(--space-md);font-style:italic;color:var(--color-text-muted)">Everything is in order. The lads keep a tidy ship.</p>
+    `);
+}
+
+function handleFeedInteract() {
+    const count = GameState.horses.length;
+    const weeklyCost = count * 350;
+    showYardPanel(`
+        <h3>Feed Store</h3>
+        <p>Bags of oats, hay bales, and supplements stacked high.</p>
+        <div class="yard-stat-row"><span class="stat-label">Horses to Feed</span><span class="stat-value">${count}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Weekly Feed Cost</span><span class="stat-value">\u00A3${formatMoney(weeklyCost)}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Hay Bales</span><span class="stat-value">${count * 4}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Oats (bags)</span><span class="stat-value">${count * 2}</span></div>
+        <p style="margin-top:var(--space-md);font-style:italic;color:var(--color-text-muted)">Supplies are well stocked for the season ahead.</p>
+    `);
+}
+
+function handleOfficeInteract() {
+    const sorted = [...GameState.standings].sort((a, b) => b.points - a.points);
+    const playerRank = sorted.findIndex(s => s.isPlayer) + 1;
+    const playerPts = sorted.find(s => s.isPlayer)?.points || 0;
+    const nextRace = GameState.races[GameState.currentRaceIndex];
+    const nextRaceText = nextRace && !nextRace.completed ? nextRace.name : 'Season complete';
+
+    let standingsHTML = sorted.slice(0, 5).map((s, i) =>
+        `<div class="yard-stat-row"><span class="stat-label">${i + 1}. ${s.name}${s.isPlayer ? ' (You)' : ''}</span><span class="stat-value">${s.points} pts</span></div>`
+    ).join('');
+
+    showYardPanel(`
+        <h3>Trainer's Office</h3>
+        <div class="yard-stat-row"><span class="stat-label">Season</span><span class="stat-value">${GameState.season}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Budget</span><span class="stat-value">\u00A3${formatMoney(GameState.budget)}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Standing</span><span class="stat-value">${getOrdinal(playerRank)} (${playerPts} pts)</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Next Race</span><span class="stat-value">${nextRaceText}</span></div>
+        <h3 style="margin-top:var(--space-md)">Standings</h3>
+        ${standingsHTML}
+    `);
+}
+
+function handleRingInteract() {
+    const trainingHorses = GameState.horses.filter(h => h.trainingFocus && !h.isYearling);
+    let listHTML;
+    if (trainingHorses.length === 0) {
+        listHTML = '<p>The training ring is empty. Set a training focus for your horses in the stable screen.</p>';
+    } else {
+        listHTML = trainingHorses.map(h =>
+            `<div class="yard-stat-row"><span class="stat-label">${h.name}</span><span class="stat-value">${capitalizeFirst(h.trainingFocus)}</span></div>`
+        ).join('');
+    }
+    showYardPanel(`<h3>Training Ring</h3><p>Horses currently in training:</p>${listHTML}`);
+}
+
+function handlePaddockInteract() {
+    const yearlings = GameState.horses.filter(h => h.isYearling);
+    let listHTML;
+    if (yearlings.length === 0) {
+        listHTML = '<p>The paddock is empty. Buy yearlings at the yearling sale to see them grazing here.</p>';
+    } else {
+        listHTML = yearlings.map(h =>
+            `<div class="yard-stat-row"><span class="stat-label">${h.name}</span><span class="stat-value">Yearling</span></div>`
+        ).join('');
+    }
+    showYardPanel(`<h3>Paddock</h3><p>Yearlings grazing peacefully:</p>${listHTML}`);
+}
+
+function showYardPanel(contentHTML) {
+    const panel = document.getElementById('yard-panel');
+    document.getElementById('yard-panel-content').innerHTML = contentHTML;
+    panel.style.display = 'block';
+    YardState.panelOpen = true;
+}
+
+function closeYardPanel() {
+    document.getElementById('yard-panel').style.display = 'none';
+    YardState.panelOpen = false;
+
+    // Close all open doors
+    document.querySelectorAll('.yard-stall-door.open').forEach(d => d.classList.remove('open'));
+    YardState.openDoors = {};
+}
+
+function onYardKeyDown(e) {
+    if (!YardState.active) return;
+
+    switch (e.key) {
+        case 'w': case 'W': case 'ArrowUp':    e.preventDefault(); moveYardPlayer(-1, 0); break;
+        case 's': case 'S': case 'ArrowDown':   e.preventDefault(); moveYardPlayer(1, 0); break;
+        case 'a': case 'A': case 'ArrowLeft':   e.preventDefault(); moveYardPlayer(0, -1); break;
+        case 'd': case 'D': case 'ArrowRight':  e.preventDefault(); moveYardPlayer(0, 1); break;
+        case 'e': case 'E':
+            e.preventDefault();
+            if (YardState.panelOpen) {
+                closeYardPanel();
+            } else {
+                interactAtPlayer();
+            }
+            break;
+        case 'Escape':
+            e.preventDefault();
+            if (YardState.panelOpen) {
+                closeYardPanel();
+            } else {
+                exitYard();
+            }
+            break;
+    }
+}
+
+function openYard() {
+    if (GameState.horses.length === 0) {
+        gameAlert('The Yard', 'Your yard is empty! Buy some horses first.');
+        return;
+    }
+
+    YardState.active = true;
+    YardState.playerR = 9;
+    YardState.playerC = 10;
+    YardState.openDoors = {};
+    YardState.panelOpen = false;
+
+    buildYardTiles();
+    buildYardBuildings();
+    buildYardStalls();
+    placeHorsesInStalls();
+    placeYardExtras();
+    updatePlayerPosition();
+
+    showScreen('yard');
+
+    // Delay camera update to after layout
+    requestAnimationFrame(() => {
+        updateYardCamera();
+        checkYardInteractable();
+    });
+
+    // Add keyboard listeners
+    YardState.keyHandler = onYardKeyDown;
+    document.addEventListener('keydown', YardState.keyHandler);
+}
+
+function exitYard() {
+    YardState.active = false;
+    closeYardPanel();
+
+    if (YardState.keyHandler) {
+        document.removeEventListener('keydown', YardState.keyHandler);
+        YardState.keyHandler = null;
+    }
+
+    // Clean up stall interactables (remove dynamic ones)
+    for (let i = YARD_INTERACTABLES.length - 1; i >= 0; i--) {
+        if (YARD_INTERACTABLES[i].id.startsWith('stall')) {
+            YARD_INTERACTABLES.splice(i, 1);
+        }
+    }
 
     updateDashboard();
     showScreen('dashboard');
@@ -3905,6 +5410,7 @@ window.startNextSeason = startNextSeason;
 window.openGallops = openGallops;
 window.selectGallopsYearling = selectGallopsYearling;
 window.selectGallopsFocus = selectGallopsFocus;
+window.runSellingAuction = runSellingAuction;
 
 // ============================================
 // EVENT LISTENERS
@@ -4011,6 +5517,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Gallops buttons
     document.getElementById('nav-gallops').addEventListener('click', () => openGallops());
 
+    // The Yard buttons
+    document.getElementById('nav-yard').addEventListener('click', () => openYard());
+
+    document.getElementById('btn-yard-back').addEventListener('click', () => exitYard());
+
+    document.getElementById('btn-yard-panel-close').addEventListener('click', () => closeYardPanel());
+
     document.getElementById('btn-gallops-back').addEventListener('click', async () => {
         if (GallopsState.isGalloping) {
             const confirmed = await gameConfirm('Leave Gallops', 'A workout is in progress. Leave anyway?');
@@ -4049,6 +5562,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updateDashboard();
         showScreen('dashboard');
     });
+
+    // Selling auction buttons
+    document.getElementById('btn-next-selling-lot').addEventListener('click', nextSellingLot);
+    document.getElementById('btn-finish-selling-auction').addEventListener('click', finishSellingAuction);
 
     // Stable buttons
     document.getElementById('btn-stable-back').addEventListener('click', () => {

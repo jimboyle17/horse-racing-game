@@ -3576,3 +3576,941 @@ body {
         align-items: center;
     }
 }
+
+/* ===== Ratings & Handicap System ===== */
+
+/* Race type badges */
+.race-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+.race-type-badge.handicap {
+    background: #f0c040;
+    color: #5a4200;
+}
+
+.race-type-badge.group {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.race-type-badge.conditions {
+    background: #3b82f6;
+    color: #fff;
+}
+
+/* OR badge (entry cards) */
+.or-badge {
+    display: inline-block;
+    background: #2c2c2c;
+    color: #f0f0f0;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* OR badge (stable cards) */
+.or-badge-stable {
+    display: inline-block;
+    background: #3a3a3a;
+    color: #e0e0e0;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 0.65rem;
+    font-weight: 600;
+    margin-left: 6px;
+}
+
+/* OR display in horse detail modal */
+.or-display {
+    text-align: center;
+    padding: var(--space-sm) 0;
+}
+
+.or-value-large {
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--color-primary);
+}
+
+/* Weight badge */
+.weight-badge {
+    display: inline-block;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-style: italic;
+}
+
+/* Rating change colours */
+.rating-up {
+    color: var(--color-success);
+}
+
+.rating-down {
+    color: var(--color-danger);
+}
+
+.rating-same {
+    color: var(--color-text-muted);
+}
+
+/* Handicapper report items */
+.rating-change-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-bg-dark);
+}
+
+.rating-change-item:last-child {
+    border-bottom: none;
+}
+
+.rating-change-horse {
+    font-weight: 600;
+}
+
+/* Rating history in horse detail */
+.rating-history {
+    margin-top: var(--space-sm);
+}
+
+.rating-history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--color-bg-dark);
+    gap: var(--space-sm);
+}
+
+.rating-history-item:last-child {
+    border-bottom: none;
+}
+
+.rating-history-item span:first-child {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Entry card rating info row */
+.entry-rating-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-xs);
+    margin-bottom: var(--space-xs);
+}
+
+/* Entry weight footnote */
+.entry-weight-note {
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+/* ===== Selling Auction Styles ===== */
+
+/* Pending sale badge for stable cards */
+.pending-sale-badge {
+    background: rgba(201, 162, 39, 0.2);
+    color: #8a6d1b;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: var(--space-md);
+    text-align: center;
+}
+
+/* Gold border for pending-sale cards */
+.stable-horse-card.pending-sale {
+    border-color: var(--color-secondary);
+    background: rgba(201, 162, 39, 0.04);
+}
+
+.stable-horse-card.pending-sale:hover {
+    border-color: var(--color-secondary-dark);
+}
+
+/* Reserve price input in modal */
+.reserve-input-group {
+    display: flex;
+    gap: var(--space-md);
+    align-items: center;
+    margin: var(--space-lg) 0;
+}
+
+.reserve-input-group label {
+    font-size: 0.95rem;
+    color: var(--color-text-light);
+    white-space: nowrap;
+}
+
+.reserve-input-group input {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    font-size: 1.1rem;
+    font-family: var(--font-body);
+    border: 2px solid var(--color-bg-dark);
+    border-radius: var(--radius-md);
+    text-align: right;
+}
+
+.reserve-input-group input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+/* Unsold horse card in results */
+.won-horse-card.unsold {
+    border-left: 4px solid var(--color-danger);
+    opacity: 0.8;
+}
+
+/* Selling preview item in between-races */
+.selling-preview-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md);
+    border-left: 4px solid var(--color-secondary);
+    background: var(--color-card);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    margin-bottom: var(--space-sm);
+    box-shadow: var(--shadow-sm);
+}
+
+.selling-preview-item .horse-name {
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.selling-preview-item .reserve-info {
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+}
+
+/* Sell button in horse detail */
+.btn-sell {
+    background: var(--color-secondary);
+    color: var(--color-primary-dark);
+    font-weight: 600;
+    width: 100%;
+    margin-top: var(--space-md);
+}
+
+.btn-sell:hover:not(:disabled) {
+    background: var(--color-secondary-light);
+}
+
+.btn-cancel-sale {
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
+    font-weight: 600;
+    width: 100%;
+    margin-top: var(--space-md);
+}
+
+.btn-cancel-sale:hover:not(:disabled) {
+    background: rgba(220, 53, 69, 0.2);
+}
+
+/* ===== THE YARD - Isometric Walkable Training Yard ===== */
+
+#yard {
+    background: #4a7a3b;
+    overflow: hidden;
+}
+
+#yard .game-header {
+    position: relative;
+    z-index: 100;
+}
+
+.yard-controls-hint {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    letter-spacing: 0.3px;
+}
+
+/* Viewport & World */
+.yard-viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #4a7a3b;
+}
+
+.yard-world {
+    position: absolute;
+    width: 2000px;
+    height: 1400px;
+    transition: transform 0.35s ease-out;
+    transform-origin: 0 0;
+}
+
+/* Isometric tile */
+.yard-tile {
+    position: absolute;
+    width: 64px;
+    height: 32px;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    transition: filter 0.15s;
+}
+
+.yard-tile.grass {
+    background:
+        repeating-linear-gradient(75deg, transparent, transparent 2px, rgba(80,170,50,0.3) 2px, rgba(80,170,50,0.3) 3px),
+        repeating-linear-gradient(95deg, transparent, transparent 3px, rgba(40,120,30,0.25) 3px, rgba(40,120,30,0.25) 4px),
+        linear-gradient(135deg, #5c9a42 0%, #4e8c36 40%, #68a84e 70%, #5c9a42 100%);
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.1);
+}
+
+.yard-tile.path {
+    background:
+        radial-gradient(ellipse 3px 2px at 20% 30%, rgba(160,140,110,0.5) 0%, transparent 100%),
+        radial-gradient(ellipse 2px 2px at 60% 70%, rgba(140,120,90,0.4) 0%, transparent 100%),
+        radial-gradient(ellipse 3px 1px at 80% 20%, rgba(170,150,120,0.3) 0%, transparent 100%),
+        linear-gradient(135deg, #b8a88a 0%, #c4b496 30%, #aa987a 60%, #b8a88a 100%);
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.15);
+}
+
+.yard-tile.cobble {
+    background:
+        radial-gradient(ellipse 8px 6px at 25% 25%, #a89888 0%, transparent 70%),
+        radial-gradient(ellipse 7px 5px at 75% 30%, #b0a090 0%, transparent 70%),
+        radial-gradient(ellipse 8px 5px at 50% 75%, #a09080 0%, transparent 70%),
+        radial-gradient(ellipse 6px 5px at 15% 70%, #a89888 0%, transparent 70%),
+        radial-gradient(ellipse 7px 6px at 85% 80%, #98887a 0%, transparent 70%),
+        linear-gradient(135deg, #9a8e7e 0%, #8e8272 50%, #9a8e7e 100%);
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.25);
+}
+
+.yard-tile.dirt {
+    background:
+        radial-gradient(ellipse 4px 3px at 30% 40%, rgba(130,100,60,0.4) 0%, transparent 100%),
+        radial-gradient(ellipse 3px 3px at 70% 25%, rgba(180,140,90,0.3) 0%, transparent 100%),
+        radial-gradient(ellipse 5px 2px at 50% 80%, rgba(120,90,55,0.35) 0%, transparent 100%),
+        linear-gradient(135deg, #a08060 0%, #96764e 35%, #aa8a6a 65%, #a08060 100%);
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.15);
+}
+
+.yard-tile.paddock {
+    background:
+        radial-gradient(circle 2px at 20% 35%, rgba(255,255,255,0.15) 0%, transparent 100%),
+        radial-gradient(circle 2px at 65% 60%, rgba(255,255,255,0.12) 0%, transparent 100%),
+        radial-gradient(circle 1.5px at 45% 20%, rgba(255,255,255,0.1) 0%, transparent 100%),
+        repeating-linear-gradient(80deg, transparent, transparent 2px, rgba(90,180,60,0.25) 2px, rgba(90,180,60,0.25) 3px),
+        linear-gradient(135deg, #6aad4e 0%, #5ea044 40%, #72b856 70%, #6aad4e 100%);
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.08);
+}
+
+.yard-tile.fence {
+    background:
+        repeating-linear-gradient(90deg, rgba(139,90,43,0.6) 0px, rgba(139,90,43,0.6) 1px, transparent 1px, transparent 8px),
+        repeating-linear-gradient(0deg, rgba(100,65,20,0.3) 0px, rgba(100,65,20,0.3) 1px, transparent 1px, transparent 4px),
+        linear-gradient(135deg, #5c9a42 0%, #4e8c36 50%, #5c9a42 100%);
+    border: 1px solid rgba(139,90,43,0.6);
+}
+
+.yard-tile.gate {
+    background: #c8a96e;
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.2);
+}
+
+/* Buildings - composite 3D cuboid */
+.yard-building {
+    position: absolute;
+    transform-style: preserve-3d;
+}
+
+.yard-building .bldg-top {
+    position: absolute;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    z-index: 3;
+}
+
+.yard-building .bldg-left {
+    position: absolute;
+    transform: skewY(26.57deg);
+    transform-origin: top right;
+    z-index: 2;
+}
+
+.yard-building .bldg-right {
+    position: absolute;
+    transform: skewY(-26.57deg);
+    transform-origin: top left;
+    z-index: 2;
+}
+
+/* Stable block - wood grain */
+.yard-building.stable .bldg-left {
+    background:
+        repeating-linear-gradient(180deg, transparent, transparent 5px, rgba(0,0,0,0.08) 5px, rgba(0,0,0,0.08) 6px),
+        repeating-linear-gradient(92deg, transparent, transparent 2px, rgba(90,55,20,0.15) 2px, rgba(90,55,20,0.15) 3px),
+        linear-gradient(180deg, #6b4c2e 0%, #5e4228 50%, #6b4c2e 100%);
+}
+.yard-building.stable .bldg-right {
+    background:
+        repeating-linear-gradient(180deg, transparent, transparent 5px, rgba(0,0,0,0.08) 5px, rgba(0,0,0,0.08) 6px),
+        repeating-linear-gradient(88deg, transparent, transparent 2px, rgba(70,40,15,0.15) 2px, rgba(70,40,15,0.15) 3px),
+        linear-gradient(180deg, #5a3d22 0%, #4e3418 50%, #5a3d22 100%);
+}
+.yard-building.stable .bldg-top {
+    background: linear-gradient(135deg, #8b5e3c 0%, #7a4e2e 30%, #96684a 60%, #8b5e3c 100%);
+}
+.yard-building.stable .bldg-top::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: rgba(0,0,0,0.15);
+    transform: translateX(-50%) rotate(0deg);
+}
+
+/* Tack room - wood grain */
+.yard-building.tack .bldg-left {
+    background:
+        repeating-linear-gradient(180deg, transparent, transparent 4px, rgba(0,0,0,0.07) 4px, rgba(0,0,0,0.07) 5px),
+        linear-gradient(180deg, #7a6650 0%, #6e5a44 50%, #7a6650 100%);
+}
+.yard-building.tack .bldg-right {
+    background:
+        repeating-linear-gradient(180deg, transparent, transparent 4px, rgba(0,0,0,0.07) 4px, rgba(0,0,0,0.07) 5px),
+        linear-gradient(180deg, #6a5640 0%, #5e4c36 50%, #6a5640 100%);
+}
+.yard-building.tack .bldg-top {
+    background: linear-gradient(135deg, #9a8670 0%, #8e7a64 40%, #a69078 70%, #9a8670 100%);
+}
+
+/* Feed store - corrugated metal */
+.yard-building.feed .bldg-left {
+    background:
+        repeating-linear-gradient(180deg, rgba(255,255,255,0.06) 0px, rgba(0,0,0,0.06) 3px, rgba(255,255,255,0.06) 6px),
+        linear-gradient(180deg, #7a7060 0%, #6e6454 50%, #7a7060 100%);
+}
+.yard-building.feed .bldg-right {
+    background:
+        repeating-linear-gradient(180deg, rgba(255,255,255,0.05) 0px, rgba(0,0,0,0.05) 3px, rgba(255,255,255,0.05) 6px),
+        linear-gradient(180deg, #6a6050 0%, #5e5444 50%, #6a6050 100%);
+}
+.yard-building.feed .bldg-top {
+    background: linear-gradient(135deg, #9a9080 0%, #8e8474 40%, #a69a8a 70%, #9a9080 100%);
+}
+
+/* Office - stone texture */
+.yard-building.office .bldg-left {
+    background:
+        radial-gradient(ellipse 6px 4px at 25% 30%, rgba(160,140,120,0.3) 0%, transparent 100%),
+        radial-gradient(ellipse 5px 4px at 70% 60%, rgba(150,130,110,0.25) 0%, transparent 100%),
+        radial-gradient(ellipse 6px 3px at 50% 85%, rgba(140,125,105,0.2) 0%, transparent 100%),
+        linear-gradient(180deg, #8b7a6a 0%, #7f6e5e 50%, #8b7a6a 100%);
+}
+.yard-building.office .bldg-right {
+    background:
+        radial-gradient(ellipse 5px 4px at 30% 40%, rgba(140,120,100,0.25) 0%, transparent 100%),
+        radial-gradient(ellipse 6px 3px at 65% 70%, rgba(130,115,95,0.2) 0%, transparent 100%),
+        linear-gradient(180deg, #7a695a 0%, #6e5d4e 50%, #7a695a 100%);
+}
+.yard-building.office .bldg-top {
+    background: linear-gradient(135deg, #a89888 0%, #9c8c7c 40%, #b4a494 70%, #a89888 100%);
+}
+
+/* Training ring */
+.yard-building.ring .bldg-left { background: transparent; }
+.yard-building.ring .bldg-right { background: transparent; }
+.yard-building.ring .bldg-top {
+    background: #a08060;
+    border: 2px solid #8b5a2b;
+    opacity: 0.7;
+}
+
+/* Paddock area */
+.yard-building.paddock-area .bldg-top {
+    background: #6aad4e;
+    border: 2px dashed #8b5a2b;
+    opacity: 0.5;
+}
+
+/* Building drop shadows */
+.yard-building.stable,
+.yard-building.tack,
+.yard-building.feed,
+.yard-building.office {
+    filter: drop-shadow(3px 4px 4px rgba(0,0,0,0.25));
+}
+
+/* Window details on building walls */
+.yard-building.stable .bldg-right::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 70%;
+    height: 3px;
+    background: repeating-linear-gradient(90deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 6px, transparent 6px, transparent 10px);
+}
+
+.yard-building.office .bldg-left::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 10px;
+    background: rgba(180,210,230,0.4);
+    border: 1px solid rgba(0,0,0,0.15);
+    border-radius: 1px;
+}
+
+.yard-building.feed .bldg-left::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 14px;
+    background: rgba(0,0,0,0.15);
+    border-radius: 1px 1px 0 0;
+}
+
+/* Building label - wooden sign style */
+.yard-building-label {
+    position: absolute;
+    font-size: 8px;
+    font-weight: 700;
+    color: #f0e8d0;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: linear-gradient(180deg, #6b4c2e 0%, #5a3d22 100%);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid #3a2010;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Stable stall doors */
+.yard-stall-door {
+    position: absolute;
+    width: 20px;
+    height: 28px;
+    background:
+        linear-gradient(135deg, transparent 0%, transparent 48%, rgba(0,0,0,0.12) 48%, rgba(0,0,0,0.12) 52%, transparent 52%),
+        linear-gradient(45deg, transparent 0%, transparent 48%, rgba(0,0,0,0.12) 48%, rgba(0,0,0,0.12) 52%, transparent 52%),
+        repeating-linear-gradient(180deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px),
+        linear-gradient(180deg, #6b4c2e 0%, #5a3d22 50%, #4e3418 100%);
+    border: 1px solid #3a2010;
+    border-radius: 2px 2px 0 0;
+    cursor: pointer;
+    transition: transform 0.4s ease, background 0.3s;
+    transform-origin: left center;
+    z-index: 5;
+    box-shadow: inset 0 0 3px rgba(0,0,0,0.2);
+}
+
+/* Door handle/bolt */
+.yard-stall-door::after {
+    content: '';
+    position: absolute;
+    right: 3px;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    background: radial-gradient(circle, #d4af37 30%, #c9a227 60%, #a08020 100%);
+    border-radius: 50%;
+    transform: translateY(-50%);
+    box-shadow: 0 0 2px rgba(0,0,0,0.4), -1px 0 0 #a08020;
+}
+
+/* Bolt latch line */
+.yard-stall-door::before {
+    content: '';
+    position: absolute;
+    right: 2px;
+    top: calc(50% - 1px);
+    width: 7px;
+    height: 2px;
+    background: #a08020;
+    border-radius: 1px;
+}
+
+.yard-stall-door.open {
+    transform: perspective(200px) rotateY(-70deg);
+    background:
+        repeating-linear-gradient(180deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px),
+        linear-gradient(180deg, #5a3d22 0%, #4a2d15 50%, #3e2410 100%);
+}
+
+/* Horse name plate above stall */
+.yard-stall-nameplate {
+    position: absolute;
+    font-size: 6px;
+    font-weight: 700;
+    color: #3a2010;
+    background: linear-gradient(180deg, #d4c4a0 0%, #c8b890 100%);
+    border: 1px solid #a0906a;
+    border-radius: 1px;
+    padding: 1px 3px;
+    white-space: nowrap;
+    pointer-events: none;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    z-index: 6;
+}
+
+/* Horse inside stall (visible when door open) */
+.yard-stall-horse {
+    position: absolute;
+    width: 30px;
+    height: 20px;
+    z-index: 4;
+    opacity: 0;
+    transition: opacity 0.3s ease 0.2s;
+    pointer-events: none;
+}
+
+.yard-stall-door.open ~ .yard-stall-horse {
+    opacity: 1;
+}
+
+/* Fence posts */
+.yard-fence-post {
+    position: absolute;
+    width: 4px;
+    height: 16px;
+    background: #8b5a2b;
+    border-radius: 1px;
+    z-index: 4;
+}
+
+.yard-fence-rail {
+    position: absolute;
+    height: 2px;
+    background: #a0703c;
+    z-index: 3;
+}
+
+/* Gate element */
+.yard-gate {
+    position: absolute;
+    width: 40px;
+    height: 24px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.yard-gate-door {
+    width: 32px;
+    height: 20px;
+    background: #8b5a2b;
+    border: 2px solid #6b3a1b;
+    border-radius: 3px 3px 0 0;
+    position: relative;
+}
+
+.yard-gate-door::before {
+    content: 'EXIT';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 6px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+}
+
+/* Player sprite */
+.yard-player {
+    position: absolute;
+    width: 24px;
+    height: 36px;
+    z-index: 50;
+    transition: left 0.35s ease-out, top 0.35s ease-out;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+    pointer-events: none;
+}
+
+.yard-player .player-svg {
+    width: 100%;
+    height: 100%;
+}
+
+.yard-player.walking {
+    animation: yardPlayerBob 0.3s ease-in-out infinite;
+}
+
+@keyframes yardPlayerBob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+.yard-player-jacket {
+    fill: var(--silk-primary, #1a5f3c);
+}
+
+.yard-player-arm-l,
+.yard-player-arm-r {
+    fill: var(--silk-primary, #1a5f3c);
+}
+
+.yard-player-cap {
+    fill: var(--silk-secondary, #c9a227);
+}
+
+/* Interact prompt */
+.yard-interact-prompt {
+    position: absolute;
+    z-index: 60;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+    animation: yardPromptPulse 1.5s ease-in-out infinite;
+    white-space: nowrap;
+}
+
+.yard-prompt-key {
+    background: var(--color-secondary);
+    color: var(--color-primary-dark);
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.75rem;
+}
+
+@keyframes yardPromptPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Slide-up info panel */
+.yard-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--color-card);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+    z-index: 80;
+    max-height: 45vh;
+    overflow-y: auto;
+    padding: var(--space-lg) var(--space-xl);
+    animation: yardPanelSlideUp 0.3s ease-out;
+}
+
+@keyframes yardPanelSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.yard-panel-close {
+    position: absolute;
+    top: var(--space-md);
+    right: var(--space-md);
+    background: var(--color-bg);
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 81;
+}
+
+.yard-panel-close:hover {
+    background: var(--color-bg-dark);
+}
+
+.yard-panel-content h3 {
+    font-family: var(--font-display);
+    color: var(--color-primary);
+    margin-bottom: var(--space-md);
+    font-size: 1.2rem;
+}
+
+.yard-panel-content p {
+    color: var(--color-text-light);
+    margin-bottom: var(--space-sm);
+    font-size: 0.9rem;
+}
+
+.yard-panel-content .yard-horse-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--color-bg);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-sm);
+}
+
+.yard-horse-info .horse-name {
+    font-family: var(--font-display);
+    color: var(--color-primary);
+    font-size: 1rem;
+}
+
+.yard-panel-content .yard-stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-xs) 0;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--color-bg-dark);
+}
+
+.yard-stat-row .stat-label {
+    color: var(--color-text-light);
+    width: auto;
+}
+
+.yard-stat-row .stat-value {
+    font-weight: 600;
+    color: var(--color-primary);
+    width: auto;
+    text-align: right;
+}
+
+/* Grazing horse sprites in paddock */
+.yard-grazing-horse {
+    position: absolute;
+    z-index: 4;
+    opacity: 0.85;
+}
+
+.yard-grazing-horse svg {
+    width: 28px;
+    height: 18px;
+}
+
+/* Training ring horse sprites */
+.yard-training-horse {
+    position: absolute;
+    z-index: 4;
+}
+
+.yard-training-horse svg {
+    width: 24px;
+    height: 16px;
+}
+
+.yard-training-horse.trotting {
+    animation: yardTrot 2s linear infinite;
+}
+
+@keyframes yardTrot {
+    0% { transform: translateX(0); }
+    50% { transform: translateX(20px); }
+    100% { transform: translateX(0); }
+}
+
+/* Animated grass sway on paddock tiles */
+.yard-tile.paddock {
+    animation: yardGrassSway 3s ease-in-out infinite;
+}
+
+.yard-tile.paddock:nth-child(odd) {
+    animation-delay: -1.5s;
+}
+
+@keyframes yardGrassSway {
+    0%, 100% { background-position: 0px 0px, 0px 0px, 0px 0px, 0px 0px, 0px 0px; }
+    50% { background-position: 1px 0px, -1px 0px, 0px 0px, 0px 0px, 0px 0px; }
+}
+
+/* Floating dust motes */
+.yard-viewport::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 55;
+    pointer-events: none;
+    background:
+        radial-gradient(circle 1px at 15% 25%, rgba(255,240,200,0.4) 0%, transparent 100%),
+        radial-gradient(circle 1px at 45% 60%, rgba(255,240,200,0.3) 0%, transparent 100%),
+        radial-gradient(circle 1px at 70% 35%, rgba(255,240,200,0.35) 0%, transparent 100%),
+        radial-gradient(circle 1px at 85% 75%, rgba(255,240,200,0.25) 0%, transparent 100%),
+        radial-gradient(circle 1px at 30% 80%, rgba(255,240,200,0.3) 0%, transparent 100%);
+    animation: yardDustFloat 8s ease-in-out infinite;
+}
+
+@keyframes yardDustFloat {
+    0%, 100% { opacity: 0.4; transform: translateY(0) translateX(0); }
+    25% { opacity: 0.7; transform: translateY(-8px) translateX(4px); }
+    50% { opacity: 0.5; transform: translateY(-4px) translateX(-3px); }
+    75% { opacity: 0.8; transform: translateY(-10px) translateX(6px); }
+}
+
+/* Viewport vignette */
+.yard-viewport::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 56;
+    pointer-events: none;
+    background: radial-gradient(ellipse 70% 65% at 50% 50%, transparent 0%, rgba(0,0,0,0.15) 100%);
+}
+
+/* Ambient ground shadow */
+.yard-world::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 50% 45%, transparent 0%, rgba(0,0,0,0.06) 100%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Yard decoration elements */
+.yard-decoration {
+    position: absolute;
+    pointer-events: none;
+}
+
+/* Interactable highlight on hover */
+.yard-tile.interactable:hover {
+    filter: brightness(1.15);
+    cursor: pointer;
+}

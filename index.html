@@ -142,6 +142,11 @@
                         <span class="nav-title">Gallops</span>
                         <span class="nav-subtitle">Yearling Training</span>
                     </button>
+                    <button class="nav-card" id="nav-yard">
+                        <span class="nav-icon">🏘️</span>
+                        <span class="nav-title">The Yard</span>
+                        <span class="nav-subtitle">Explore Your Yard</span>
+                    </button>
                 </div>
 
                 <div class="dashboard-panels">
@@ -582,6 +587,69 @@
         </main>
     </div>
 
+    <!-- Selling Auction Screen -->
+    <div id="selling-auction" class="screen">
+        <header class="game-header">
+            <div class="header-left">
+                <span class="logo-small">🏇</span>
+                <span class="page-title">Tattersalls Selling Auction</span>
+            </div>
+            <div class="header-right">
+                <span class="budget-display">£<span id="selling-auction-budget">500,000</span></span>
+            </div>
+        </header>
+
+        <!-- Live Selling View -->
+        <div id="selling-auction-live" class="auction-section">
+            <div class="auction-ring">
+                <div class="current-lot">
+                    <span class="lot-number">Lot <span id="selling-lot-number">1</span> of <span id="selling-total-lots">1</span></span>
+                    <h2 id="selling-lot-name">Horse Name</h2>
+                    <div class="lot-horse-age">Age: <span id="selling-lot-age">3</span> years</div>
+                </div>
+
+                <div id="selling-parade-ring" class="parade-ring">
+                    <!-- Horse SVG populated by JS -->
+                </div>
+
+                <div class="lot-stats" id="selling-lot-stats">
+                    <!-- Stats populated by JS -->
+                </div>
+
+                <div class="bidding-display">
+                    <div class="current-bid-label">Current Bid</div>
+                    <div class="current-bid-amount">£<span id="selling-current-bid">0</span></div>
+                    <div class="current-bidder">Leading: <span id="selling-leading-bidder">-</span></div>
+                </div>
+
+                <div class="your-bid-info">
+                    <div class="your-max-bid">
+                        Reserve Price: £<span id="selling-reserve-display">0</span>
+                    </div>
+                    <div id="selling-bid-status" class="bid-status"></div>
+                </div>
+
+                <div class="auction-controls">
+                    <button id="btn-next-selling-lot" class="btn btn-primary" style="display: none;">Next Lot →</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Selling Results View -->
+        <div id="selling-auction-results" class="auction-section" style="display: none;">
+            <div class="results-container">
+                <h2>Sale Complete</h2>
+                <div id="selling-results-summary" class="results-summary">
+                    <!-- Populated by JS -->
+                </div>
+                <div id="selling-results-horses" class="horses-won">
+                    <!-- Populated by JS -->
+                </div>
+                <button id="btn-finish-selling-auction" class="btn btn-primary">Continue</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Gallops Screen (Yearling Training) -->
     <div id="gallops" class="screen">
         <header class="game-header">
@@ -671,6 +739,47 @@
                 <button id="btn-gallops-another" class="btn btn-primary">Return to Gallops</button>
                 <button id="btn-gallops-dashboard" class="btn btn-secondary">Return to Dashboard</button>
             </div>
+        </div>
+    </div>
+
+    <!-- The Yard Screen -->
+    <div id="yard" class="screen">
+        <header class="game-header">
+            <div class="header-left">
+                <button id="btn-yard-back" class="btn-icon">← Back</button>
+                <span class="page-title">The Yard</span>
+            </div>
+            <div class="header-right">
+                <span class="yard-controls-hint">WASD to move · E to interact</span>
+            </div>
+        </header>
+        <div class="yard-viewport">
+            <div class="yard-world" id="yard-world">
+                <!-- Tiles and buildings rendered by JS -->
+            </div>
+            <div class="yard-player" id="yard-player">
+                <svg viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg" class="player-svg">
+                    <ellipse cx="12" cy="34" rx="5" ry="2" fill="rgba(0,0,0,0.15)"/>
+                    <rect x="9" y="18" width="2.5" height="10" rx="1" fill="#3a3028"/>
+                    <rect x="12.5" y="18" width="2.5" height="10" rx="1" fill="#332a22"/>
+                    <rect x="9" y="27" width="2.5" height="2" rx="0.5" fill="#1a1208"/>
+                    <rect x="12.5" y="27" width="2.5" height="2" rx="0.5" fill="#1a1208"/>
+                    <path d="M7,18 Q7,12 12,10 Q17,12 17,18 Z" class="yard-player-jacket"/>
+                    <rect x="5" y="12" width="3" height="8" rx="1.5" class="yard-player-arm-l"/>
+                    <rect x="16" y="12" width="3" height="8" rx="1.5" class="yard-player-arm-r"/>
+                    <circle cx="12" cy="8" r="3.5" fill="#f0d0a0"/>
+                    <path d="M8,7 Q8,3 12,2 Q16,3 16,7 Q16,5.5 14,5 Q10,5 8,7 Z" class="yard-player-cap"/>
+                    <circle cx="13.5" cy="7.8" r="0.5" fill="#333"/>
+                </svg>
+            </div>
+            <div class="yard-interact-prompt" id="yard-interact-prompt" style="display:none;">
+                <span class="yard-prompt-key">E</span>
+                <span class="yard-prompt-text" id="yard-prompt-text">Interact</span>
+            </div>
+        </div>
+        <div class="yard-panel" id="yard-panel" style="display:none;">
+            <button class="yard-panel-close" id="btn-yard-panel-close">×</button>
+            <div class="yard-panel-content" id="yard-panel-content"></div>
         </div>
     </div>
 
