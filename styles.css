@@ -3986,6 +3986,12 @@ body {
 .yard-building-2d.gallops-bldg {
     background: linear-gradient(135deg, #a08060, #8a7050);
 }
+.yard-building-2d.forage {
+    background: linear-gradient(135deg, #8a9a60, #7a8a50);
+}
+.yard-building-2d.supplier {
+    background: linear-gradient(135deg, #6a7a8a, #5a6a7a);
+}
 
 /* Building label */
 .yard-building-label {

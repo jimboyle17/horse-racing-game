@@ -41,7 +41,13 @@ const GameState = {
     maxStalls: 10,
     feedSupply: 20,
     tack: { saddles: 2, bridles: 2, rugs: 4 },
-    barnExpansions: 0
+    barnExpansions: 0,
+
+    // Forage & bedding stock
+    forage: { hay: 10, straw: 5, shavings: 5 },
+
+    // Barn upgrades (passive bonuses)
+    barnUpgrades: { rubberMatting: false, autoWaterers: false, climateControl: false }
 };
 
 // ============================================
@@ -1191,6 +1197,12 @@ function loadGame() {
         if (GameState.feedSupply === undefined) GameState.feedSupply = 20;
         if (!GameState.tack) GameState.tack = { saddles: 2, bridles: 2, rugs: 4 };
         if (GameState.barnExpansions === undefined) GameState.barnExpansions = 0;
+
+        // Migration: add forage & bedding if missing
+        if (!GameState.forage) GameState.forage = { hay: 10, straw: 5, shavings: 5 };
+
+        // Migration: add barn upgrades if missing
+        if (!GameState.barnUpgrades) GameState.barnUpgrades = { rubberMatting: false, autoWaterers: false, climateControl: false };
 
         openYardHub();
         return true;
@@ -4662,6 +4674,8 @@ const OUTDOOR_BLDGS = [
     { id: 'tattersalls', label: "Tattersall's",   r: 3,  c: 2,  w: 7,  h: 4, css: 'tattersalls' },
     { id: 'gallops',     label: 'The Gallops',   r: 3,  c: 31, w: 7,  h: 4, css: 'gallops-bldg' },
     { id: 'racecourse',  label: 'Racecourse',    r: 24, c: 28, w: 9,  h: 4, css: 'racecourse' },
+    { id: 'forage',      label: 'Forage & Bedding', r: 25, c: 3,  w: 6, h: 3, css: 'forage' },
+    { id: 'supplier',    label: 'Stable Supplier',  r: 25, c: 14, w: 6, h: 3, css: 'supplier' },
 ];
 
 // Outdoor interactables
@@ -4678,6 +4692,10 @@ const OUTDOOR_INTERACT = [
     { id: 'gall-2',   r: 7,  c: 34, prompt: 'Head to the Gallops', handler: 'gallops' },
     { id: 'race-1',   r: 23, c: 31, prompt: 'Go to Racecourse',    handler: 'racecourse' },
     { id: 'race-2',   r: 23, c: 32, prompt: 'Go to Racecourse',    handler: 'racecourse' },
+    { id: 'for-1',    r: 24, c: 5,  prompt: 'Visit Forage & Bedding', handler: 'forage' },
+    { id: 'for-2',    r: 24, c: 6,  prompt: 'Visit Forage & Bedding', handler: 'forage' },
+    { id: 'sup-1',    r: 24, c: 16, prompt: 'Visit Stable Supplier',  handler: 'supplier' },
+    { id: 'sup-2',    r: 24, c: 17, prompt: 'Visit Stable Supplier',  handler: 'supplier' },
 ];
 
 const YardState = {
@@ -4722,8 +4740,11 @@ function generateOutdoorMap() {
     // NE path to Gallops (cols 33-34, rows 7-15)
     for (let r = 7; r <= 15; r++) { map[r][33] = T_PATH; map[r][34] = T_PATH; }
 
-    // South path from barn (cols 19-20, rows 18-22)
-    for (let r = 18; r <= 22; r++) { map[r][19] = T_PATH; map[r][20] = T_PATH; }
+    // South path from barn (cols 19-20, rows 18-24)
+    for (let r = 18; r <= 24; r++) { map[r][19] = T_PATH; map[r][20] = T_PATH; }
+
+    // West branch connecting Forage & Supplier (rows 24-25, cols 5-20)
+    for (let c = 5; c <= 20; c++) { map[24][c] = T_PATH; map[25][c] = T_PATH; }
 
     // SE branch to Racecourse (rows 22-23, cols 20-32)
     for (let c = 20; c <= 32; c++) { map[22][c] = T_PATH; map[23][c] = T_PATH; }
@@ -5088,6 +5109,8 @@ function interactYard() {
         case 'gallops':      leaveYardForScreen(); openGallops(); break;
         case 'racecourse':   leaveYardForScreen(); openRaces(); break;
         case 'expand-barn':  handleExpandBarn(); break;
+        case 'forage':       handleForageInteract(); break;
+        case 'supplier':     handleSupplierInteract(); break;
     }
 }
 
@@ -5261,6 +5284,72 @@ function handleExpandBarn() {
     `);
 }
 
+function handleForageInteract() {
+    const f = GameState.forage;
+    const budget = GameState.budget;
+    const items = [
+        { key: 'hay',      label: 'Hay',      price: 300 },
+        { key: 'straw',    label: 'Straw',    price: 200 },
+        { key: 'shavings', label: 'Shavings', price: 250 },
+    ];
+    const rows = items.map(it => {
+        const buyBtns = [10, 20, 50].map(amt =>
+            `<button class="yard-buy-btn" onclick="buyForage('${it.key}',${amt})" ${budget < amt * it.price ? 'disabled' : ''}>Buy ${amt}</button>`
+        ).join(' ');
+        return `
+            <div class="yard-buy-row" style="flex-wrap:wrap;gap:var(--space-xs);">
+                <span style="width:100%;">${it.label} (\u00A3${formatMoney(it.price)}/bale) \u2014 Stock: ${f[it.key]}</span>
+                ${buyBtns}
+            </div>`;
+    }).join('');
+    showYardPanel(`
+        <h3>Forage & Bedding Store</h3>
+        <p>Buy hay, straw, and shavings for your horses.</p>
+        <div class="yard-stat-row"><span class="stat-label">Your Budget</span><span class="stat-value">\u00A3${formatMoney(budget)}</span></div>
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        ${rows}
+    `);
+}
+
+function handleSupplierInteract() {
+    const budget = GameState.budget;
+    const u = GameState.barnUpgrades;
+    const upgrades = [
+        { key: 'rubberMatting',  label: 'Rubber Matting',  cost: 50000,  desc: '+5% condition recovery' },
+        { key: 'autoWaterers',   label: 'Auto Waterers',   cost: 75000,  desc: '+3% condition recovery' },
+        { key: 'climateControl', label: 'Climate Control', cost: 150000, desc: '+5% condition recovery' },
+    ];
+    const upgradeRows = upgrades.map(up => {
+        if (u[up.key]) {
+            return `<div class="yard-buy-row"><span>${up.label} \u2014 ${up.desc}</span><span style="color:var(--color-success);font-weight:600;">Purchased</span></div>`;
+        }
+        return `<div class="yard-buy-row">
+            <span>${up.label} (\u00A3${formatMoney(up.cost)}) \u2014 ${up.desc}</span>
+            <button class="yard-buy-btn" onclick="buyBarnUpgrade('${up.key}')" ${budget < up.cost ? 'disabled' : ''}>Buy</button>
+        </div>`;
+    }).join('');
+
+    const canExpand = GameState.maxStalls < 20;
+    const expandCost = 100000;
+    const expandRow = canExpand
+        ? `<div class="yard-buy-row">
+            <span>Barn Expansion (+2 stalls, \u00A3${formatMoney(expandCost)}) \u2014 Current: ${GameState.maxStalls}</span>
+            <button class="yard-buy-btn" onclick="expandBarn()" ${budget < expandCost ? 'disabled' : ''}>Buy</button>
+           </div>`
+        : `<div class="yard-buy-row"><span>Barn Expansion</span><span style="color:var(--color-text-muted);">Max (20 stalls)</span></div>`;
+
+    showYardPanel(`
+        <h3>Stable Supplier</h3>
+        <p>Barn expansions and upgrades for passive bonuses.</p>
+        <div class="yard-stat-row"><span class="stat-label">Your Budget</span><span class="stat-value">\u00A3${formatMoney(budget)}</span></div>
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        <h4 style="margin:var(--space-sm) 0;">Expansion</h4>
+        ${expandRow}
+        <h4 style="margin:var(--space-sm) 0;">Upgrades</h4>
+        ${upgradeRows}
+    `);
+}
+
 // --- Panel ---
 
 function showYardPanel(contentHTML) {
@@ -5344,6 +5433,37 @@ function expandBarn() {
     handleExpandBarn();
 }
 
+function buyForage(type, amount) {
+    const prices = { hay: 300, straw: 200, shavings: 250 };
+    const cost = amount * prices[type];
+    if (GameState.budget < cost) {
+        gameAlert('Insufficient Funds', `You need \u00A3${formatMoney(cost)} to buy ${amount} bales of ${type}.`);
+        return;
+    }
+    GameState.budget -= cost;
+    GameState.forage[type] += amount;
+    updateYardHUD();
+    handleForageInteract();
+}
+
+function buyBarnUpgrade(upgrade) {
+    const costs = { rubberMatting: 50000, autoWaterers: 75000, climateControl: 150000 };
+    const labels = { rubberMatting: 'Rubber Matting', autoWaterers: 'Auto Waterers', climateControl: 'Climate Control' };
+    const cost = costs[upgrade];
+    if (GameState.barnUpgrades[upgrade]) {
+        gameAlert('Already Purchased', `${labels[upgrade]} has already been installed.`);
+        return;
+    }
+    if (GameState.budget < cost) {
+        gameAlert('Insufficient Funds', `${labels[upgrade]} costs \u00A3${formatMoney(cost)}.`);
+        return;
+    }
+    GameState.budget -= cost;
+    GameState.barnUpgrades[upgrade] = true;
+    updateYardHUD();
+    handleSupplierInteract();
+}
+
 // --- Hub Routing ---
 
 function openYardHub() {
@@ -5419,6 +5539,8 @@ window.runSellingAuction = runSellingAuction;
 window.buyFeed = buyFeed;
 window.buyTack = buyTack;
 window.expandBarn = expandBarn;
+window.buyForage = buyForage;
+window.buyBarnUpgrade = buyBarnUpgrade;
 window.leaveYardForScreen = leaveYardForScreen;
 window.closeYardPanel = closeYardPanel;
 window.openAuction = openAuction;
