@@ -44,7 +44,7 @@ const GameState = {
     barnExpansions: 0,
 
     // Forage & bedding stock
-    forage: { hay: 10, straw: 5, shavings: 5 },
+    forage: { hay: 10, straw: 5, shavings: 5, carrots: 0 },
 
     // Barn upgrades (passive bonuses)
     barnUpgrades: { rubberMatting: false, autoWaterers: false, climateControl: false }
@@ -1199,7 +1199,8 @@ function loadGame() {
         if (GameState.barnExpansions === undefined) GameState.barnExpansions = 0;
 
         // Migration: add forage & bedding if missing
-        if (!GameState.forage) GameState.forage = { hay: 10, straw: 5, shavings: 5 };
+        if (!GameState.forage) GameState.forage = { hay: 10, straw: 5, shavings: 5, carrots: 0 };
+        if (GameState.forage && GameState.forage.carrots === undefined) GameState.forage.carrots = 0;
 
         // Migration: add barn upgrades if missing
         if (!GameState.barnUpgrades) GameState.barnUpgrades = { rubberMatting: false, autoWaterers: false, climateControl: false };
@@ -4744,11 +4745,15 @@ function generateOutdoorMap() {
     // Main east-west path (rows 16-17)
     for (let c = 1; c < C-1; c++) { map[16][c] = T_PATH; map[17][c] = T_PATH; }
 
-    // NW path to Tattersalls (cols 5-6, rows 7-15)
-    for (let r = 7; r <= 15; r++) { map[r][5] = T_PATH; map[r][6] = T_PATH; }
+    // NW path to Tattersalls (L-shaped, avoids Tack Store cols 3-7)
+    for (let r = 8; r <= 16; r++) { map[r][9] = T_PATH; map[r][10] = T_PATH; }   // vertical segment east of Tack Store
+    for (let c = 5; c <= 10; c++) { map[8][c] = T_PATH; }                          // horizontal connector at row 8
+    for (let r = 7; r <= 8; r++) { map[r][5] = T_PATH; map[r][6] = T_PATH; }      // short stub to Tattersalls entrance
 
-    // NE path to Gallops (cols 33-34, rows 7-15)
-    for (let r = 7; r <= 15; r++) { map[r][33] = T_PATH; map[r][34] = T_PATH; }
+    // NE path to Gallops (L-shaped, avoids Feed Mill cols 32-36)
+    for (let r = 8; r <= 16; r++) { map[r][29] = T_PATH; map[r][30] = T_PATH; }   // vertical segment west of Feed Mill
+    for (let c = 29; c <= 34; c++) { map[8][c] = T_PATH; }                          // horizontal connector at row 8
+    for (let r = 7; r <= 8; r++) { map[r][33] = T_PATH; map[r][34] = T_PATH; }    // short stub to Gallops entrance
 
     // South path from barn (cols 19-20, rows 18-24)
     for (let r = 18; r <= 24; r++) { map[r][19] = T_PATH; map[r][20] = T_PATH; }
@@ -4773,39 +4778,47 @@ function generateOutdoorMap() {
 
 function generateBarnMap() {
     const stallsPerSide = Math.floor(GameState.maxStalls / 2);
-    const rows = 1 + 2 + stallsPerSide * 2 + 1;
+    const roomStart = stallsPerSide * 3;
+    const rows = stallsPerSide * 3 + 3;   // stalls + tack/feed rooms (2 rows) + exit row
     const cols = BARN_COLS;
     const map = Array.from({length: rows}, () => new Array(cols).fill(B_WALL));
     const lastRow = rows - 1;
 
-    // Central walkway (cols 5-8)
+    // Central aisle (cols 5-8) from row 1 to lastRow-1
     for (let r = 1; r < lastRow; r++)
         for (let c = 5; c <= 8; c++) map[r][c] = B_FLOOR;
 
-    // Tack Room (left, rows 1-2, cols 1-3)
-    for (let r = 1; r <= 2; r++)
-        for (let c = 1; c <= 3; c++) map[r][c] = B_ROOM;
-    map[2][4] = B_DOOR;
-
-    // Feed Room (right, rows 1-2, cols 10-12)
-    for (let r = 1; r <= 2; r++)
-        for (let c = 10; c <= 12; c++) map[r][c] = B_ROOM;
-    map[2][9] = B_DOOR;
-
-    // Stalls
+    // Stalls (top section, 3 rows per stall: 2 stall rows + 1 wall gap)
     for (let s = 0; s < stallsPerSide; s++) {
-        const baseRow = 3 + s * 2;
+        const baseRow = 1 + s * 3;
+        // Left stall (cols 1-3)
         for (let c = 1; c <= 3; c++) {
             map[baseRow][c] = B_STALL;
             map[baseRow + 1][c] = B_STALL;
         }
-        map[baseRow + 1][4] = B_DOOR;
+        map[baseRow + 1][4] = B_DOOR;  // door into aisle
+        // Right stall (cols 10-12)
         for (let c = 10; c <= 12; c++) {
             map[baseRow][c] = B_STALL;
             map[baseRow + 1][c] = B_STALL;
         }
-        map[baseRow + 1][9] = B_DOOR;
+        map[baseRow + 1][9] = B_DOOR;  // door into aisle
+        // Row baseRow+2 stays B_WALL at stall cols (containment gap)
     }
+
+    // Tack Room (left, near entrance)
+    for (let c = 1; c <= 3; c++) {
+        map[roomStart][c] = B_ROOM;
+        map[roomStart + 1][c] = B_ROOM;
+    }
+    map[roomStart + 1][4] = B_DOOR;
+
+    // Feed Room (right, near entrance)
+    for (let c = 10; c <= 12; c++) {
+        map[roomStart][c] = B_ROOM;
+        map[roomStart + 1][c] = B_ROOM;
+    }
+    map[roomStart + 1][9] = B_DOOR;
 
     // Exit doors at south wall
     for (let c = 5; c <= 8; c++) map[lastRow][c] = B_DOOR;
@@ -4815,37 +4828,42 @@ function generateBarnMap() {
 
 function generateBarnInteractables() {
     const stallsPerSide = Math.floor(GameState.maxStalls / 2);
-    const lastRow = 1 + 2 + stallsPerSide * 2;
+    const roomStart = stallsPerSide * 3;
+    const lastRow = stallsPerSide * 3 + 2;
     const horses = GameState.horses.filter(h => !h.isYearling);
     const list = [];
 
-    list.push({ id: 'tack-room', r: 2, c: 4, prompt: 'Look in Tack Room', handler: 'tack-room' });
-    list.push({ id: 'feed-room', r: 2, c: 9, prompt: 'Look in Feed Room', handler: 'feed-room' });
+    // Tack/Feed room interactables (near entrance, south end)
+    list.push({ id: 'tack-room', r: roomStart + 1, c: 4, prompt: 'Look in Tack Room', handler: 'tack-room' });
+    list.push({ id: 'feed-room', r: roomStart + 1, c: 9, prompt: 'Look in Feed Room', handler: 'feed-room' });
 
+    // Stall interactables INSIDE each stall (not at the door)
     for (let s = 0; s < stallsPerSide; s++) {
-        const doorRow = 3 + s * 2 + 1;
+        const baseRow = 1 + s * 3;
         const leftIdx = s;
         const rightIdx = s + stallsPerSide;
         const leftHorse = leftIdx < horses.length ? horses[leftIdx] : null;
         list.push({
-            id: `stall-L${s}`, r: doorRow, c: 4,
-            prompt: leftHorse ? `Visit ${leftHorse.name}` : 'Empty Stall',
+            id: `stall-L${s}`, r: baseRow, c: 2,
+            prompt: leftHorse ? leftHorse.name : 'Empty Stall',
             handler: 'stall', stallIdx: leftIdx
         });
         const rightHorse = rightIdx < horses.length ? horses[rightIdx] : null;
         list.push({
-            id: `stall-R${s}`, r: doorRow, c: 9,
-            prompt: rightHorse ? `Visit ${rightHorse.name}` : 'Empty Stall',
+            id: `stall-R${s}`, r: baseRow, c: 11,
+            prompt: rightHorse ? rightHorse.name : 'Empty Stall',
             handler: 'stall', stallIdx: rightIdx
         });
     }
 
+    // Exit doors
     for (let c = 5; c <= 8; c++) {
         list.push({ id: `barn-exit-${c}`, r: lastRow, c, prompt: 'Exit the Barn', handler: 'exit-barn' });
     }
 
+    // Expand barn (near exit, on aisle)
     if (GameState.maxStalls < 20) {
-        list.push({ id: 'expand', r: lastRow - 1, c: 1, prompt: 'Expand Barn (\u00A3100,000)', handler: 'expand-barn' });
+        list.push({ id: 'expand', r: lastRow - 1, c: 8, prompt: 'Expand Barn (\u00A3100,000)', handler: 'expand-barn' });
     }
 
     return list;
@@ -4950,19 +4968,20 @@ function buildBarnContents() {
     const world = document.getElementById('yard-world');
     const horses = GameState.horses.filter(h => !h.isYearling);
     const stallsPerSide = Math.floor(GameState.maxStalls / 2);
+    const roomStart = stallsPerSide * 3;
+    const lastRow = stallsPerSide * 3 + 2;
 
     for (let s = 0; s < stallsPerSide; s++) {
-        const baseRow = 3 + s * 2;
+        const baseRow = 1 + s * 3;
         const leftIdx = s;
         if (leftIdx < horses.length) placeHorseInBarnStall(world, horses[leftIdx], baseRow, 1);
         const rightIdx = s + stallsPerSide;
         if (rightIdx < horses.length) placeHorseInBarnStall(world, horses[rightIdx], baseRow, 10);
     }
 
-    addBarnLabel(world, 'Tack Room', 2, 0.2);
-    addBarnLabel(world, 'Feed Room', 11, 0.2);
+    addBarnLabel(world, 'Tack Room', 2, roomStart - 0.5);
+    addBarnLabel(world, 'Feed Room', 11, roomStart - 0.5);
 
-    const lastRow = 1 + 2 + stallsPerSide * 2;
     addBarnLabel(world, 'EXIT', 6.2, lastRow - 0.5);
 }
 
@@ -5178,6 +5197,7 @@ function handleStallInteract2D(ia) {
     const h = horses[idx];
     const condClass = h.condition >= 70 ? 'color:var(--color-success)' : h.condition >= 40 ? 'color:var(--color-warning)' : 'color:var(--color-danger)';
     const trainingText = h.trainingFocus ? capitalizeFirst(h.trainingFocus) : 'None';
+    const carrotCount = GameState.forage.carrots || 0;
     showYardPanel(`
         <h3>${h.name}</h3>
         <div class="yard-horse-info">
@@ -5191,7 +5211,25 @@ function handleStallInteract2D(ia) {
         <div class="yard-stat-row"><span class="stat-label">Training</span><span class="stat-value">${trainingText}</span></div>
         <div class="yard-stat-row"><span class="stat-label">Wins / Races</span><span class="stat-value">${h.wins} / ${h.racesRun}</span></div>
         ${h.isInjured ? `<p style="color:var(--color-danger);margin-top:var(--space-sm);">Injured: ${h.injuryType} (${h.recoveryRacesLeft} races left)</p>` : ''}
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        <div class="yard-buy-row">
+            <span>Carrots: ${carrotCount}</span>
+            <button class="yard-buy-btn" onclick="feedCarrot(${idx})" ${carrotCount <= 0 ? 'disabled' : ''}>Feed Carrot</button>
+        </div>
     `);
+}
+
+function feedCarrot(stallIdx) {
+    if (GameState.forage.carrots <= 0) return;
+    GameState.forage.carrots--;
+    const horses = GameState.horses.filter(h => !h.isYearling);
+    if (stallIdx < horses.length) {
+        const boost = randomInt(0, 1);
+        horses[stallIdx].condition = Math.min(100, horses[stallIdx].condition + boost);
+    }
+    // Refresh the stall panel
+    const ia = YardState._currentInteractable;
+    if (ia) handleStallInteract2D(ia);
 }
 
 function handleTackRoomInteract() {
@@ -5301,6 +5339,7 @@ function handleForageInteract() {
         { key: 'hay',      label: 'Hay',      price: 300 },
         { key: 'straw',    label: 'Straw',    price: 200 },
         { key: 'shavings', label: 'Shavings', price: 250 },
+        { key: 'carrots',  label: 'Carrots',  price: 100 },
     ];
     const rows = items.map(it => {
         const buyBtns = [10, 20, 50].map(amt =>
@@ -5444,7 +5483,7 @@ function expandBarn() {
 }
 
 function buyForage(type, amount) {
-    const prices = { hay: 300, straw: 200, shavings: 250 };
+    const prices = { hay: 300, straw: 200, shavings: 250, carrots: 100 };
     const cost = amount * prices[type];
     if (GameState.budget < cost) {
         gameAlert('Insufficient Funds', `You need \u00A3${formatMoney(cost)} to buy ${amount} bales of ${type}.`);
@@ -5551,6 +5590,7 @@ window.buyTack = buyTack;
 window.expandBarn = expandBarn;
 window.buyForage = buyForage;
 window.buyBarnUpgrade = buyBarnUpgrade;
+window.feedCarrot = feedCarrot;
 window.leaveYardForScreen = leaveYardForScreen;
 window.closeYardPanel = closeYardPanel;
 window.openAuction = openAuction;
