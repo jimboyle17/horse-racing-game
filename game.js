@@ -3050,19 +3050,29 @@ function finishSellingAuction() {
 /**
  * Phase 5: Refactored applyTrainingEffects - returns data instead of alerting
  */
+function getBarnUpgradeBonus() {
+    const u = GameState.barnUpgrades;
+    let bonus = 0;
+    if (u.rubberMatting) bonus += 5;
+    if (u.autoWaterers) bonus += 3;
+    if (u.climateControl) bonus += 5;
+    return bonus;
+}
+
 function applyTrainingEffects() {
     const trainingResults = [];
     const trainingInjuries = [];
+    const upgradeBonus = getBarnUpgradeBonus();
 
     GameState.horses.forEach(horse => {
         if (horse.isYearling) {
-            horse.condition = Math.min(horse.condition + randomInt(10, 20), 100);
+            horse.condition = Math.min(horse.condition + randomInt(10, 20) + upgradeBonus, 100);
             trainingResults.push({ horse: horse.name, result: 'yearling', detail: 'Resting and recovering (yearling)' });
             return;
         }
 
         if (horse.isInjured) {
-            horse.condition = Math.min(horse.condition + randomInt(5, 10), 100);
+            horse.condition = Math.min(horse.condition + randomInt(5, 10) + upgradeBonus, 100);
             trainingResults.push({
                 horse: horse.name,
                 result: 'resting',
@@ -3120,7 +3130,7 @@ function applyTrainingEffects() {
             });
         }
 
-        horse.condition = Math.min(horse.condition + randomInt(10, 20), 100);
+        horse.condition = Math.min(horse.condition + randomInt(10, 20) + upgradeBonus, 100);
     });
 
     const setbackReports = checkForSetbacks();
@@ -3131,7 +3141,7 @@ function applyTrainingEffects() {
 function restHorse(horseId) {
     const horse = GameState.horses.find(h => h.id === horseId);
     if (horse) {
-        horse.condition = Math.min(horse.condition + 30, 100);
+        horse.condition = Math.min(horse.condition + 30 + getBarnUpgradeBonus(), 100);
     }
 }
 
