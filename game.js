@@ -35,7 +35,13 @@ const GameState = {
     silkSecondary: '#c9a227',
 
     // Save timestamp
-    lastSaved: null
+    lastSaved: null,
+
+    // Yard economy
+    maxStalls: 10,
+    feedSupply: 20,
+    tack: { saddles: 2, bridles: 2, rugs: 4 },
+    barnExpansions: 0
 };
 
 // ============================================
@@ -911,6 +917,7 @@ function showScreen(screenId) {
         screen.classList.remove('active');
     });
     document.getElementById(screenId).classList.add('active');
+    window.scrollTo(0, 0);
 }
 
 // ============================================
@@ -980,8 +987,7 @@ function startNewGame(stableName, budget, difficulty) {
     initializeCompetitors();
     initializeRaceCalendar();
 
-    updateDashboard();
-    showScreen('dashboard');
+    openYardHub();
 }
 
 // ============================================
@@ -1180,8 +1186,13 @@ function loadGame() {
             if (h.reservePrice === undefined) h.reservePrice = 0;
         });
 
-        updateDashboard();
-        showScreen('dashboard');
+        // Migration: add yard economy fields if missing
+        if (GameState.maxStalls === undefined) GameState.maxStalls = 10;
+        if (GameState.feedSupply === undefined) GameState.feedSupply = 20;
+        if (!GameState.tack) GameState.tack = { saddles: 2, bridles: 2, rugs: 4 };
+        if (GameState.barnExpansions === undefined) GameState.barnExpansions = 0;
+
+        openYardHub();
         return true;
     }
     return false;
@@ -1646,8 +1657,7 @@ function finishAuction() {
 
     GameState.budget -= AuctionState.totalSpent;
 
-    updateDashboard();
-    showScreen('dashboard');
+    returnToYard();
 }
 
 // ============================================
@@ -2036,8 +2046,7 @@ function finishYearlingSale() {
 
     GameState.budget -= YearlingAuctionState.totalSpent;
 
-    updateDashboard();
-    showScreen('dashboard');
+    returnToYard();
 }
 
 // ============================================
@@ -4303,9 +4312,26 @@ function showRaceResults(positions, bestPlace, totalPrizeMoney, points, playerHo
 function showBetweenRaces(trainingData) {
     const { trainingResults, trainingInjuries, setbackReports } = trainingData;
 
+    // Consume feed between races
+    const feedResult = consumeFeed();
+
     document.getElementById('between-season').textContent = GameState.season;
 
     let html = '';
+
+    // Feed status warning
+    if (feedResult.shortage) {
+        html += `<div class="between-section" style="border-left:4px solid var(--color-danger);background:rgba(220,50,50,0.06);">
+            <h3>Feed Shortage!</h3>
+            <p>You didn't have enough feed for all your horses. ${feedResult.missing} horse(s) went unfed.</p>
+            <p style="color:var(--color-danger);font-weight:600;">All horses lost 15% condition. Buy more feed at the Feed Mill!</p>
+        </div>`;
+    } else if (feedResult.consumed > 0) {
+        html += `<div class="between-section">
+            <h3>Feed Report</h3>
+            <p>${feedResult.consumed} unit(s) of feed consumed. Remaining: ${GameState.feedSupply} units.</p>
+        </div>`;
+    }
 
     // Tattersalls Sale section - at the top if any horses are listed for sale
     const pendingSaleHorses = GameState.horses.filter(h => h.pendingAuction);
@@ -4426,7 +4452,7 @@ function showBetweenRaces(trainingData) {
         html += '</div></div>';
     }
 
-    html += '<button class="btn btn-primary" onclick="continueToDashboard()">Continue to Dashboard</button>';
+    html += '<button class="btn btn-primary" onclick="continueToDashboard()">Return to Yard</button>';
 
     document.getElementById('between-races-content').innerHTML = html;
     showScreen('between-races');
@@ -4440,8 +4466,7 @@ function quickSetTraining(selectEl) {
 }
 
 function continueToDashboard() {
-    updateDashboard();
-    showScreen('dashboard');
+    returnToYard();
 }
 
 // ============================================
@@ -4607,384 +4632,260 @@ function startNextSeason() {
         h.reservePrice = 0;
     });
 
-    updateDashboard();
-    showScreen('dashboard');
+    returnToYard();
 }
 
 // ============================================
-// THE YARD - Isometric Walkable Training Yard
+// THE YARD - Top-Down 2D Hub World
 // ============================================
 
-const YARD_COLS = 20;
-const YARD_ROWS = 16;
-const TILE_W = 64;
-const TILE_H = 32;
-const YARD_ORIGIN_X = 640;
-const YARD_ORIGIN_Y = 40;
+const TILE_SIZE = 32;
+const OUTDOOR_ROWS = 30;
+const OUTDOOR_COLS = 40;
+const BARN_COLS = 14;
 
-// Tile types: 0=grass, 1=path, 2=cobble, 3=dirt, 4=paddock, 5=fence, 6=solid, 7=gate
-const YARD_TILE_NAMES = ['grass','path','cobble','dirt','paddock','fence','solid','gate'];
+// Outdoor tile types
+const T_GRASS = 0, T_PATH = 1, T_COBBLE = 2, T_BLDG = 3, T_FENCE = 4, T_PADDOCK = 5, T_WATER = 6;
+const TILE_CSS = ['grass','path','cobble','building-floor','fence','paddock','water'];
+const TILE_WALK = [true, true, true, false, false, true, false];
 
-// Yard layout map: row-major [row][col]
-const YARD_MAP = [
-    [5,5,5,5,5,5,5,0,0,0,0,0,5,5,5,5,5,5,5,5],
-    [5,4,4,4,4,4,5,0,0,0,0,0,5,3,3,3,3,3,5,0],
-    [5,4,4,4,4,4,5,0,0,0,0,0,5,3,3,3,3,3,5,0],
-    [5,4,4,4,4,4,5,0,0,0,0,0,5,3,3,3,3,3,5,0],
-    [5,5,5,5,5,5,5,0,0,0,0,0,5,5,5,5,5,5,5,0],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [0,0,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,0,0],
-    [0,0,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,0,0],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-    [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-    [2,2,6,6,6,2,6,6,6,2,2,1,1,1,2,6,6,6,6,2],
-    [2,2,6,6,6,2,6,6,6,2,2,1,1,1,2,6,6,6,6,2],
-    [2,2,2,2,2,2,2,2,2,2,2,1,1,1,2,2,2,2,2,2],
-    [5,5,5,5,5,5,5,5,5,7,7,7,7,5,5,5,5,5,5,5],
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+// Barn tile types
+const B_WALL = 0, B_FLOOR = 1, B_STALL = 2, B_DOOR = 3, B_ROOM = 4;
+const BARN_CSS = ['wall','building-floor','stall-floor','door','building-floor'];
+const BARN_WALK = [false, true, true, true, true];
+
+// Building definitions
+const OUTDOOR_BLDGS = [
+    { id: 'barn',        label: 'The Barn',      r: 10, c: 15, w: 10, h: 6, css: 'barn' },
+    { id: 'tack-store',  label: 'Tack Store',    r: 12, c: 3,  w: 5,  h: 4, css: 'tack-store' },
+    { id: 'feed-mill',   label: 'Feed Mill',     r: 12, c: 32, w: 5,  h: 4, css: 'feed-mill' },
+    { id: 'tattersalls', label: "Tattersall's",   r: 3,  c: 2,  w: 7,  h: 4, css: 'tattersalls' },
+    { id: 'gallops',     label: 'The Gallops',   r: 3,  c: 31, w: 7,  h: 4, css: 'gallops-bldg' },
+    { id: 'racecourse',  label: 'Racecourse',    r: 24, c: 28, w: 9,  h: 4, css: 'racecourse' },
 ];
 
-// Walkable check: 0=grass, 1=path, 2=cobble, 3=dirt, 4=paddock are walkable; 5=fence, 6=solid blocked; 7=gate=interactable+walkable
-function isWalkable(r, c) {
-    if (r < 0 || r >= YARD_ROWS || c < 0 || c >= YARD_COLS) return false;
-    const t = YARD_MAP[r][c];
-    return t !== 5 && t !== 6;
-}
-
-// Buildings definition: { id, type, label, gridR, gridC, gridW, gridH, wallH }
-const YARD_BUILDINGS = [
-    { id: 'stable',  type: 'stable',  label: 'Stables',       gridR: 6, gridC: 2, gridW: 16, gridH: 2, wallH: 48 },
-    { id: 'tack',    type: 'tack',    label: 'Tack Room',     gridR: 11, gridC: 2, gridW: 3, gridH: 2, wallH: 36 },
-    { id: 'feed',    type: 'feed',    label: 'Feed Store',    gridR: 11, gridC: 6, gridW: 3, gridH: 2, wallH: 36 },
-    { id: 'office',  type: 'office',  label: 'Office',        gridR: 11, gridC: 15, gridW: 4, gridH: 2, wallH: 40 },
-    { id: 'ring',    type: 'ring',    label: 'Training Ring', gridR: 1, gridC: 13, gridW: 5, gridH: 3, wallH: 4 },
-    { id: 'paddock', type: 'paddock-area', label: 'Paddock',  gridR: 1, gridC: 1, gridW: 5, gridH: 3, wallH: 4 },
-];
-
-// Stall positions (row=8 = south face of stable, 6 stalls)
-const YARD_STALLS = [
-    { idx: 0, gridR: 8, gridC: 3 },
-    { idx: 1, gridR: 8, gridC: 5 },
-    { idx: 2, gridR: 8, gridC: 7 },
-    { idx: 3, gridR: 8, gridC: 10 },
-    { idx: 4, gridR: 8, gridC: 12 },
-    { idx: 5, gridR: 8, gridC: 14 },
-];
-
-// Interactable spots: { id, gridR, gridC, prompt, handler }
-const YARD_INTERACTABLES = [
-    // Stall doors - generated dynamically
-    { id: 'tack',    gridR: 11, gridC: 3, prompt: 'Look in Tack Room',   handler: 'tack' },
-    { id: 'tack2',   gridR: 11, gridC: 4, prompt: 'Look in Tack Room',   handler: 'tack' },
-    { id: 'feed',    gridR: 11, gridC: 7, prompt: 'Look in Feed Store',   handler: 'feed' },
-    { id: 'feed2',   gridR: 11, gridC: 8, prompt: 'Look in Feed Store',   handler: 'feed' },
-    { id: 'office',  gridR: 11, gridC: 16, prompt: 'Enter Office',        handler: 'office' },
-    { id: 'office2', gridR: 11, gridC: 17, prompt: 'Enter Office',        handler: 'office' },
-    { id: 'ring',    gridR: 4, gridC: 14, prompt: 'Watch Training Ring',  handler: 'ring' },
-    { id: 'ring2',   gridR: 4, gridC: 15, prompt: 'Watch Training Ring',  handler: 'ring' },
-    { id: 'paddock', gridR: 4, gridC: 2,  prompt: 'Look at Paddock',      handler: 'paddock' },
-    { id: 'paddock2',gridR: 4, gridC: 3,  prompt: 'Look at Paddock',      handler: 'paddock' },
-    { id: 'gate',    gridR: 14, gridC: 10, prompt: 'Leave the Yard',      handler: 'gate' },
-    { id: 'gate2',   gridR: 14, gridC: 11, prompt: 'Leave the Yard',      handler: 'gate' },
+// Outdoor interactables
+const OUTDOOR_INTERACT = [
+    { id: 'barn-e1',  r: 16, c: 19, prompt: 'Enter the Barn',      handler: 'enter-barn' },
+    { id: 'barn-e2',  r: 16, c: 20, prompt: 'Enter the Barn',      handler: 'enter-barn' },
+    { id: 'tack-s1',  r: 16, c: 5,  prompt: 'Visit Tack Store',    handler: 'tack-store' },
+    { id: 'tack-s2',  r: 16, c: 6,  prompt: 'Visit Tack Store',    handler: 'tack-store' },
+    { id: 'feed-m1',  r: 16, c: 33, prompt: 'Visit Feed Mill',     handler: 'feed-mill' },
+    { id: 'feed-m2',  r: 16, c: 34, prompt: 'Visit Feed Mill',     handler: 'feed-mill' },
+    { id: 'tatt-1',   r: 7,  c: 5,  prompt: "Enter Tattersall's",  handler: 'tattersalls' },
+    { id: 'tatt-2',   r: 7,  c: 6,  prompt: "Enter Tattersall's",  handler: 'tattersalls' },
+    { id: 'gall-1',   r: 7,  c: 33, prompt: 'Head to the Gallops', handler: 'gallops' },
+    { id: 'gall-2',   r: 7,  c: 34, prompt: 'Head to the Gallops', handler: 'gallops' },
+    { id: 'race-1',   r: 23, c: 31, prompt: 'Go to Racecourse',    handler: 'racecourse' },
+    { id: 'race-2',   r: 23, c: 32, prompt: 'Go to Racecourse',    handler: 'racecourse' },
 ];
 
 const YardState = {
     active: false,
-    playerR: 9,
-    playerC: 10,
-    facing: 'down',
-    openDoors: {},     // stallIdx -> true
+    currentZone: 'outdoor',
+    playerR: 18,
+    playerC: 19,
     keyHandler: null,
-    keyUpHandler: null,
     walkingTimeout: null,
     panelOpen: false,
+    _currentInteractable: null,
+    outdoorMap: null,
+    barnMap: null,
+    barnInteractables: [],
 };
 
-function yardIsoX(c, r) {
-    return (c - r) * (TILE_W / 2) + YARD_ORIGIN_X;
+// --- Map Generation ---
+
+function generateOutdoorMap() {
+    const R = OUTDOOR_ROWS, C = OUTDOOR_COLS;
+    const map = Array.from({length: R}, () => new Array(C).fill(T_GRASS));
+    const fill = (r1, c1, r2, c2, t) => {
+        for (let r = Math.max(0, r1); r <= Math.min(R-1, r2); r++)
+            for (let c = Math.max(0, c1); c <= Math.min(C-1, c2); c++)
+                map[r][c] = t;
+    };
+
+    // Fence border
+    fill(0, 0, 0, C-1, T_FENCE);
+    fill(R-1, 0, R-1, C-1, T_FENCE);
+    for (let r = 0; r < R; r++) { map[r][0] = T_FENCE; map[r][C-1] = T_FENCE; }
+
+    // Cobblestone courtyard around barn
+    fill(8, 12, 18, 26, T_COBBLE);
+
+    // Main east-west path (rows 16-17)
+    for (let c = 1; c < C-1; c++) { map[16][c] = T_PATH; map[17][c] = T_PATH; }
+
+    // NW path to Tattersalls (cols 5-6, rows 7-15)
+    for (let r = 7; r <= 15; r++) { map[r][5] = T_PATH; map[r][6] = T_PATH; }
+
+    // NE path to Gallops (cols 33-34, rows 7-15)
+    for (let r = 7; r <= 15; r++) { map[r][33] = T_PATH; map[r][34] = T_PATH; }
+
+    // South path from barn (cols 19-20, rows 18-22)
+    for (let r = 18; r <= 22; r++) { map[r][19] = T_PATH; map[r][20] = T_PATH; }
+
+    // SE branch to Racecourse (rows 22-23, cols 20-32)
+    for (let c = 20; c <= 32; c++) { map[22][c] = T_PATH; map[23][c] = T_PATH; }
+
+    // Paddock area (SW)
+    fill(20, 3, 23, 10, T_PADDOCK);
+
+    // Small pond
+    fill(20, 25, 22, 26, T_WATER);
+
+    // Buildings (solid, placed last to overwrite)
+    OUTDOOR_BLDGS.forEach(b => fill(b.r, b.c, b.r + b.h - 1, b.c + b.w - 1, T_BLDG));
+
+    return map;
 }
 
-function yardIsoY(c, r) {
-    return (c + r) * (TILE_H / 2) + YARD_ORIGIN_Y;
+function generateBarnMap() {
+    const stallsPerSide = Math.floor(GameState.maxStalls / 2);
+    const rows = 1 + 2 + stallsPerSide * 2 + 1;
+    const cols = BARN_COLS;
+    const map = Array.from({length: rows}, () => new Array(cols).fill(B_WALL));
+    const lastRow = rows - 1;
+
+    // Central walkway (cols 5-8)
+    for (let r = 1; r < lastRow; r++)
+        for (let c = 5; c <= 8; c++) map[r][c] = B_FLOOR;
+
+    // Tack Room (left, rows 1-2, cols 1-3)
+    for (let r = 1; r <= 2; r++)
+        for (let c = 1; c <= 3; c++) map[r][c] = B_ROOM;
+    map[2][4] = B_DOOR;
+
+    // Feed Room (right, rows 1-2, cols 10-12)
+    for (let r = 1; r <= 2; r++)
+        for (let c = 10; c <= 12; c++) map[r][c] = B_ROOM;
+    map[2][9] = B_DOOR;
+
+    // Stalls
+    for (let s = 0; s < stallsPerSide; s++) {
+        const baseRow = 3 + s * 2;
+        for (let c = 1; c <= 3; c++) {
+            map[baseRow][c] = B_STALL;
+            map[baseRow + 1][c] = B_STALL;
+        }
+        map[baseRow + 1][4] = B_DOOR;
+        for (let c = 10; c <= 12; c++) {
+            map[baseRow][c] = B_STALL;
+            map[baseRow + 1][c] = B_STALL;
+        }
+        map[baseRow + 1][9] = B_DOOR;
+    }
+
+    // Exit doors at south wall
+    for (let c = 5; c <= 8; c++) map[lastRow][c] = B_DOOR;
+
+    return map;
 }
 
-function yardIsoZ(c, r) {
-    return c + r;
+function generateBarnInteractables() {
+    const stallsPerSide = Math.floor(GameState.maxStalls / 2);
+    const lastRow = 1 + 2 + stallsPerSide * 2;
+    const horses = GameState.horses.filter(h => !h.isYearling);
+    const list = [];
+
+    list.push({ id: 'tack-room', r: 2, c: 4, prompt: 'Look in Tack Room', handler: 'tack-room' });
+    list.push({ id: 'feed-room', r: 2, c: 9, prompt: 'Look in Feed Room', handler: 'feed-room' });
+
+    for (let s = 0; s < stallsPerSide; s++) {
+        const doorRow = 3 + s * 2 + 1;
+        const leftIdx = s;
+        const rightIdx = s + stallsPerSide;
+        const leftHorse = leftIdx < horses.length ? horses[leftIdx] : null;
+        list.push({
+            id: `stall-L${s}`, r: doorRow, c: 4,
+            prompt: leftHorse ? `Visit ${leftHorse.name}` : 'Empty Stall',
+            handler: 'stall', stallIdx: leftIdx
+        });
+        const rightHorse = rightIdx < horses.length ? horses[rightIdx] : null;
+        list.push({
+            id: `stall-R${s}`, r: doorRow, c: 9,
+            prompt: rightHorse ? `Visit ${rightHorse.name}` : 'Empty Stall',
+            handler: 'stall', stallIdx: rightIdx
+        });
+    }
+
+    for (let c = 5; c <= 8; c++) {
+        list.push({ id: `barn-exit-${c}`, r: lastRow, c, prompt: 'Exit the Barn', handler: 'exit-barn' });
+    }
+
+    if (GameState.maxStalls < 20) {
+        list.push({ id: 'expand', r: lastRow - 1, c: 1, prompt: 'Expand Barn (\u00A3100,000)', handler: 'expand-barn' });
+    }
+
+    return list;
 }
 
-function buildYardTiles() {
+// --- Rendering ---
+
+function getCurrentMap() {
+    return YardState.currentZone === 'outdoor' ? YardState.outdoorMap : YardState.barnMap;
+}
+
+function buildZoneMap() {
     const world = document.getElementById('yard-world');
-    let tilesHTML = '';
-    for (let r = 0; r < YARD_ROWS; r++) {
-        for (let c = 0; c < YARD_COLS; c++) {
-            const t = YARD_MAP[r][c];
-            if (t === 6) continue; // solid = building occupies
-            const tName = YARD_TILE_NAMES[t] || 'grass';
-            const x = yardIsoX(c, r);
-            const y = yardIsoY(c, r);
-            const z = yardIsoZ(c, r);
-            tilesHTML += `<div class="yard-tile ${tName}" style="left:${x}px;top:${y}px;z-index:${z};"></div>`;
+    const map = getCurrentMap();
+    if (!map) return;
+    const rows = map.length;
+    const cols = map[0].length;
+    const isOutdoor = YardState.currentZone === 'outdoor';
+    const names = isOutdoor ? TILE_CSS : BARN_CSS;
+
+    world.style.width = (cols * TILE_SIZE) + 'px';
+    world.style.height = (rows * TILE_SIZE) + 'px';
+
+    let html = '';
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const t = map[r][c];
+            if (isOutdoor && t === T_BLDG) continue;
+            const css = names[t] || 'grass';
+            html += `<div class="yard-tile ${css}" style="left:${c * TILE_SIZE}px;top:${r * TILE_SIZE}px"></div>`;
         }
     }
-    world.innerHTML = tilesHTML;
+    world.innerHTML = html;
 }
 
-function buildYardBuildings() {
+function buildOutdoorBuildings() {
     const world = document.getElementById('yard-world');
-
-    YARD_BUILDINGS.forEach(bldg => {
+    OUTDOOR_BLDGS.forEach(b => {
         const el = document.createElement('div');
-        el.className = `yard-building ${bldg.type}`;
-        el.dataset.id = bldg.id;
+        el.className = `yard-building-2d ${b.css}`;
+        el.style.left = (b.c * TILE_SIZE) + 'px';
+        el.style.top = (b.r * TILE_SIZE) + 'px';
+        el.style.width = (b.w * TILE_SIZE) + 'px';
+        el.style.height = (b.h * TILE_SIZE) + 'px';
+        world.appendChild(el);
 
-        // Top face position (isometric diamond)
-        const topX = yardIsoX(bldg.gridC, bldg.gridR);
-        const topY = yardIsoY(bldg.gridC, bldg.gridR);
-        const topW = bldg.gridW * (TILE_W / 2) + bldg.gridH * (TILE_W / 2);
-        const topH = bldg.gridW * (TILE_H / 2) + bldg.gridH * (TILE_H / 2);
-
-        el.style.left = topX + 'px';
-        el.style.top = (topY - bldg.wallH) + 'px';
-        el.style.zIndex = yardIsoZ(bldg.gridC + bldg.gridW, bldg.gridR + bldg.gridH) + 1;
-
-        // Top face
-        const top = document.createElement('div');
-        top.className = 'bldg-top';
-        top.style.width = topW + 'px';
-        top.style.height = topH + 'px';
-        top.style.left = '0px';
-        top.style.top = '0px';
-        el.appendChild(top);
-
-        // Left face (front-left wall)
-        if (bldg.wallH > 8) {
-            const leftW = bldg.gridH * (TILE_W / 2);
-            const left = document.createElement('div');
-            left.className = 'bldg-left';
-            left.style.width = leftW + 'px';
-            left.style.height = bldg.wallH + 'px';
-            left.style.left = '0px';
-            left.style.top = (topH / 2) + 'px';
-            el.appendChild(left);
-
-            // Right face (front-right wall)
-            const rightW = bldg.gridW * (TILE_W / 2);
-            const right = document.createElement('div');
-            right.className = 'bldg-right';
-            right.style.width = rightW + 'px';
-            right.style.height = bldg.wallH + 'px';
-            right.style.left = (topW / 2) + 'px';
-            right.style.top = (topH / 2) + 'px';
-            el.appendChild(right);
-        }
-
-        // Label
         const label = document.createElement('div');
         label.className = 'yard-building-label';
-        label.textContent = bldg.label;
-        label.style.left = (topW / 2 - 20) + 'px';
-        label.style.top = (bldg.wallH > 8 ? -14 : topH / 2 - 8) + 'px';
-        el.appendChild(label);
-
-        world.appendChild(el);
+        label.textContent = b.label;
+        label.style.left = ((b.c + b.w / 2) * TILE_SIZE) + 'px';
+        label.style.top = ((b.r + b.h / 2) * TILE_SIZE) + 'px';
+        label.style.transform = 'translate(-50%, -50%)';
+        world.appendChild(label);
     });
 }
 
-function buildYardStalls() {
+function buildOutdoorDecorations() {
     const world = document.getElementById('yard-world');
-
-    YARD_STALLS.forEach((stall, idx) => {
-        const x = yardIsoX(stall.gridC, stall.gridR);
-        const y = yardIsoY(stall.gridC, stall.gridR);
-        const z = yardIsoZ(stall.gridC, stall.gridR) + 5;
-
-        // Door element
-        const door = document.createElement('div');
-        door.className = 'yard-stall-door';
-        door.dataset.stallIdx = idx;
-        door.style.left = (x + 22) + 'px';
-        door.style.top = (y - 14) + 'px';
-        door.style.zIndex = z;
-        world.appendChild(door);
-
-        // Horse inside (hidden until door opens)
-        const horseInside = document.createElement('div');
-        horseInside.className = 'yard-stall-horse';
-        horseInside.dataset.stallIdx = idx;
-        horseInside.style.left = (x + 17) + 'px';
-        horseInside.style.top = (y - 24) + 'px';
-        horseInside.style.zIndex = z - 1;
-        world.appendChild(horseInside);
-
-        // Name plate above occupied stalls
-        const horses = GameState.horses.filter(h => !h.isYearling);
-        if (idx < horses.length) {
-            const plate = document.createElement('div');
-            plate.className = 'yard-stall-nameplate';
-            plate.textContent = horses[idx].name;
-            plate.style.left = (x + 16) + 'px';
-            plate.style.top = (y - 32) + 'px';
-            plate.style.zIndex = z + 1;
-            world.appendChild(plate);
-        }
-    });
-}
-
-function placeHorsesInStalls() {
-    const horses = GameState.horses.filter(h => !h.isYearling);
-    YARD_STALLS.forEach((stall, idx) => {
-        const horseEl = document.querySelector(`.yard-stall-horse[data-stall-idx="${idx}"]`);
-        if (!horseEl) return;
-        if (idx < horses.length) {
-            const h = horses[idx];
-            const body = h.silkPrimary || '#6b3a1f';
-            const accent = h.silkSecondary || '#5a2e16';
-            horseEl.innerHTML = `<svg viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg" style="width:30px;height:20px;">
-                <!-- Body -->
-                <path d="M12,22 Q9,18 9,14 Q9,10 14,10 L30,9 Q34,7 37,4 Q39,2 42,2 Q46,1.5 47,3 Q49,3.5 50,6 Q50.5,8 49,9 L44,14 Q42,17 40,21 L38,24 Q28,20 16,24 Z" fill="${body}"/>
-                <!-- Mane -->
-                <path d="M36,5 Q34,3 33,6 Q31,4 30,7 Q28,5.5 27,8 Q26,7 25,9.5" stroke="${accent}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-                <!-- Tail -->
-                <path d="M12,22 Q8,20 6,22 Q4,25 7,27 Q5,28 6,30" stroke="${accent}" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-                <!-- Front legs -->
-                <line x1="34" y1="23" x2="35" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
-                <line x1="30" y1="23" x2="31" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
-                <!-- Back legs -->
-                <line x1="20" y1="24" x2="19" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
-                <line x1="16" y1="24" x2="15" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
-                <!-- Hooves -->
-                <rect x="34" y="31" width="2.5" height="2" rx="0.5" fill="#333"/>
-                <rect x="30" y="31" width="2.5" height="2" rx="0.5" fill="#333"/>
-                <rect x="18" y="31" width="2.5" height="2" rx="0.5" fill="#333"/>
-                <rect x="14" y="31" width="2.5" height="2" rx="0.5" fill="#333"/>
-                <!-- Eye -->
-                <circle cx="47" cy="4.5" r="1" fill="#222"/>
-                <circle cx="47.3" cy="4.2" r="0.3" fill="#fff"/>
-                <!-- Ears -->
-                <polygon points="44,2 42,0 44,1" fill="${accent}"/>
-                <polygon points="46,1.5 44.5,0 46.5,0.8" fill="${accent}"/>
-                <!-- Nostril -->
-                <circle cx="50" cy="7" r="0.5" fill="#3a1a0a"/>
-            </svg>`;
-        } else {
-            horseEl.innerHTML = '';
-        }
-    });
-
-    // Add stall interactables
-    YARD_STALLS.forEach((stall, idx) => {
-        // Interactable on the row in front of the stall (row 8 is stall, player stands on row 8 path)
-        if (!YARD_INTERACTABLES.find(ia => ia.id === `stall${idx}`)) {
-            YARD_INTERACTABLES.push({
-                id: `stall${idx}`,
-                gridR: stall.gridR,
-                gridC: stall.gridC,
-                prompt: idx < GameState.horses.filter(h => !h.isYearling).length ? 'Open stable door' : 'Empty stall',
-                handler: 'stall',
-                stallIdx: idx
-            });
-        }
-    });
-}
-
-function placeYardExtras() {
-    const world = document.getElementById('yard-world');
-
-    // Yearlings in paddock
-    const yearlings = GameState.horses.filter(h => h.isYearling);
-    yearlings.slice(0, 3).forEach((h, i) => {
-        const pr = 2 + Math.floor(i / 2);
-        const pc = 2 + (i % 3);
-        const x = yardIsoX(pc, pr);
-        const y = yardIsoY(pc, pr);
-        const el = document.createElement('div');
-        el.className = 'yard-grazing-horse';
-        el.style.left = (x + 10 + i * 8) + 'px';
-        el.style.top = (y - 6) + 'px';
-        el.style.zIndex = yardIsoZ(pc, pr) + 2;
-        el.innerHTML = `<svg viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg">
-            <!-- Grazing body - head lowered -->
-            <path d="M12,20 Q9,17 9,13 Q9,9 14,9 L30,8 Q34,9 38,12 Q40,14 42,18 L44,22 Q48,24 50,28 L48,29 Q44,26 40,24 Q32,20 16,24 Z" fill="#8b6a4a"/>
-            <!-- Mane -->
-            <path d="M34,10 Q32,8 31,11 Q29,9 28,12" stroke="#6b4a2a" stroke-width="1" fill="none" stroke-linecap="round"/>
-            <!-- Tail -->
-            <path d="M12,20 Q8,18 6,20 Q4,23 7,25" stroke="#6b4a2a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-            <!-- Legs -->
-            <line x1="34" y1="22" x2="35" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
-            <line x1="30" y1="22" x2="31" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
-            <line x1="20" y1="23" x2="19" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
-            <line x1="16" y1="23" x2="15" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
-            <!-- Hooves -->
-            <rect x="34" y="29" width="2" height="1.5" rx="0.5" fill="#333"/>
-            <rect x="30" y="29" width="2" height="1.5" rx="0.5" fill="#333"/>
-            <rect x="18" y="29" width="2" height="1.5" rx="0.5" fill="#333"/>
-            <rect x="14" y="29" width="2" height="1.5" rx="0.5" fill="#333"/>
-            <!-- Eye -->
-            <circle cx="46" cy="25" r="0.7" fill="#222"/>
-            <!-- Ear -->
-            <polygon points="42,17 40,15 42.5,16" fill="#7b5a3a"/>
-        </svg>`;
-        world.appendChild(el);
-    });
-
-    // Horses in training ring
-    const trainingHorses = GameState.horses.filter(h => h.trainingFocus && !h.isYearling);
-    trainingHorses.slice(0, 2).forEach((h, i) => {
-        const pr = 2 + i;
-        const pc = 14 + i;
-        const x = yardIsoX(pc, pr);
-        const y = yardIsoY(pc, pr);
-        const el = document.createElement('div');
-        el.className = 'yard-training-horse trotting';
-        el.style.left = (x + 10) + 'px';
-        el.style.top = (y - 4) + 'px';
-        el.style.zIndex = yardIsoZ(pc, pr) + 2;
-        const tBody = h.silkPrimary || '#6b3a1f';
-        const tAccent = h.silkSecondary || '#5a2e16';
-        el.innerHTML = `<svg viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg">
-            <!-- Trotting body -->
-            <path d="M12,22 Q9,18 9,14 Q9,10 14,10 L30,9 Q34,7 37,4 Q39,2 42,2 Q46,1.5 47,3 Q49,3.5 50,6 Q50.5,8 49,9 L44,14 Q42,17 40,21 L38,24 Q28,20 16,24 Z" fill="${tBody}"/>
-            <!-- Mane -->
-            <path d="M36,5 Q34,3 33,6 Q31,4.5 30,7" stroke="${tAccent}" stroke-width="1" fill="none" stroke-linecap="round"/>
-            <!-- Tail -->
-            <path d="M12,22 Q8,20 7,23 Q6,25 8,26" stroke="${tAccent}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-            <!-- Legs (trotting pose) -->
-            <line x1="34" y1="23" x2="37" y2="31" stroke="${tBody}" stroke-width="2" stroke-linecap="round"/>
-            <line x1="30" y1="23" x2="28" y2="31" stroke="${tBody}" stroke-width="2" stroke-linecap="round"/>
-            <line x1="20" y1="24" x2="22" y2="31" stroke="${tBody}" stroke-width="2" stroke-linecap="round"/>
-            <line x1="16" y1="24" x2="13" y2="31" stroke="${tBody}" stroke-width="2" stroke-linecap="round"/>
-            <!-- Hooves -->
-            <rect x="36" y="30" width="2" height="1.5" rx="0.5" fill="#333"/>
-            <rect x="27" y="30" width="2" height="1.5" rx="0.5" fill="#333"/>
-            <rect x="21" y="30" width="2" height="1.5" rx="0.5" fill="#333"/>
-            <rect x="12" y="30" width="2" height="1.5" rx="0.5" fill="#333"/>
-            <!-- Eye -->
-            <circle cx="47" cy="4.5" r="0.8" fill="#222"/>
-            <!-- Ear -->
-            <polygon points="44,2 42.5,0 44.5,1" fill="${tAccent}"/>
-        </svg>`;
-        world.appendChild(el);
-    });
-
-    // --- Environmental Decorations ---
-
-    // Trees along grass edges
-    const treeDefs = [
-        { r: 0, c: 8, scale: 1.0 },
-        { r: 0, c: 10, scale: 0.85 },
-        { r: 15, c: 2, scale: 0.9 },
+    const treePositions = [
+        {r:1,c:12},{r:1,c:20},{r:1,c:25},{r:1,c:38},
+        {r:28,c:2},{r:28,c:14},{r:28,c:22},{r:28,c:38},
+        {r:8,c:1},{r:14,c:1},{r:22,c:1},{r:8,c:38},{r:14,c:38},
     ];
-    treeDefs.forEach(t => {
-        const x = yardIsoX(t.c, t.r);
-        const y = yardIsoY(t.c, t.r);
+    treePositions.forEach(t => {
         const el = document.createElement('div');
         el.className = 'yard-decoration';
-        el.style.left = (x + 10) + 'px';
-        el.style.top = (y - 50 * t.scale) + 'px';
-        el.style.zIndex = yardIsoZ(t.c, t.r) + 3;
-        const s = t.scale;
-        el.innerHTML = `<svg viewBox="0 0 40 60" width="${40*s}" height="${60*s}" xmlns="http://www.w3.org/2000/svg">
+        const s = 0.8 + Math.random() * 0.3;
+        el.style.left = (t.c * TILE_SIZE) + 'px';
+        el.style.top = (t.r * TILE_SIZE - 30 * s) + 'px';
+        el.style.zIndex = 3;
+        el.innerHTML = `<svg viewBox="0 0 40 60" width="${Math.round(32*s)}" height="${Math.round(48*s)}">
             <rect x="17" y="35" width="6" height="25" rx="2" fill="#6b4226"/>
             <path d="M1,36 Q4,28 8,24 Q12,18 14,10 Q16,4 20,2 Q24,4 26,10 Q28,18 32,24 Q36,28 39,36 Q30,40 20,40 Q10,40 1,36 Z" fill="#3a7a28"/>
             <path d="M6,34 Q10,26 14,20 Q17,12 20,8 Q23,12 26,20 Q30,26 34,34 Q27,37 20,37 Q13,37 6,34 Z" fill="#4a8a34" opacity="0.7"/>
@@ -4992,152 +4893,152 @@ function placeYardExtras() {
         world.appendChild(el);
     });
 
-    // Hay bales near feed store
-    const hayDefs = [
-        { r: 13, c: 6, rot: 0 },
-        { r: 13, c: 7, rot: 15 },
-    ];
-    hayDefs.forEach(h => {
-        const x = yardIsoX(h.c, h.r);
-        const y = yardIsoY(h.c, h.r);
+    // Yearlings in paddock
+    const yearlings = GameState.horses.filter(h => h.isYearling);
+    yearlings.slice(0, 3).forEach((h, i) => {
         const el = document.createElement('div');
         el.className = 'yard-decoration';
-        el.style.left = (x + 14) + 'px';
-        el.style.top = (y - 10) + 'px';
-        el.style.zIndex = yardIsoZ(h.c, h.r) + 3;
-        el.innerHTML = `<svg viewBox="0 0 20 14" width="20" height="14" xmlns="http://www.w3.org/2000/svg" style="transform:rotate(${h.rot}deg)">
-            <rect x="1" y="2" width="18" height="10" rx="2" fill="#c8a84e"/>
-            <line x1="4" y1="2" x2="4" y2="12" stroke="#b09030" stroke-width="0.5"/>
-            <line x1="10" y1="2" x2="10" y2="12" stroke="#b09030" stroke-width="0.5"/>
-            <line x1="16" y1="2" x2="16" y2="12" stroke="#b09030" stroke-width="0.5"/>
-            <rect x="1" y="2" width="18" height="10" rx="2" fill="none" stroke="#a08028" stroke-width="0.8"/>
+        el.style.left = ((4 + i * 2) * TILE_SIZE) + 'px';
+        el.style.top = ((21 + (i % 2)) * TILE_SIZE - 6) + 'px';
+        el.style.zIndex = 4;
+        el.innerHTML = `<svg viewBox="0 0 60 40" width="28" height="18">
+            <path d="M12,20 Q9,17 9,13 Q9,9 14,9 L30,8 Q34,9 38,12 Q40,14 42,18 L44,22 Q48,24 50,28 L48,29 Q44,26 40,24 Q32,20 16,24 Z" fill="#8b6a4a"/>
+            <path d="M34,10 Q32,8 31,11 Q29,9 28,12" stroke="#6b4a2a" stroke-width="1" fill="none" stroke-linecap="round"/>
+            <path d="M12,20 Q8,18 6,20 Q4,23 7,25" stroke="#6b4a2a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <line x1="34" y1="22" x2="35" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
+            <line x1="30" y1="22" x2="31" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
+            <line x1="20" y1="23" x2="19" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
+            <line x1="16" y1="23" x2="15" y2="30" stroke="#8b6a4a" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="46" cy="25" r="0.7" fill="#222"/>
         </svg>`;
         world.appendChild(el);
     });
-
-    // Water trough near stables
-    const troughX = yardIsoX(16, 8);
-    const troughY = yardIsoY(16, 8);
-    const trough = document.createElement('div');
-    trough.className = 'yard-decoration';
-    trough.style.left = (troughX + 12) + 'px';
-    trough.style.top = (troughY - 8) + 'px';
-    trough.style.zIndex = yardIsoZ(16, 8) + 3;
-    trough.innerHTML = `<svg viewBox="0 0 28 14" width="28" height="14" xmlns="http://www.w3.org/2000/svg">
-        <rect x="1" y="3" width="26" height="10" rx="2" fill="#7a6a5a"/>
-        <rect x="2" y="4" width="24" height="8" rx="1.5" fill="#5a8ab0"/>
-        <rect x="2" y="4" width="24" height="3" rx="1" fill="rgba(255,255,255,0.15)"/>
-        <rect x="0" y="2" width="3" height="12" rx="1" fill="#6a5a4a"/>
-        <rect x="25" y="2" width="3" height="12" rx="1" fill="#6a5a4a"/>
-    </svg>`;
-    world.appendChild(trough);
-
-    // Flower boxes on the office
-    const flowerX = yardIsoX(16, 11);
-    const flowerY = yardIsoY(16, 11);
-    const flowers = document.createElement('div');
-    flowers.className = 'yard-decoration';
-    flowers.style.left = (flowerX + 20) + 'px';
-    flowers.style.top = (flowerY - 48) + 'px';
-    flowers.style.zIndex = yardIsoZ(16, 11) + 4;
-    flowers.innerHTML = `<svg viewBox="0 0 24 16" width="24" height="16" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="9" width="20" height="6" rx="1" fill="#6b4226"/>
-        <rect x="3" y="10" width="18" height="4" rx="0.5" fill="#5a3518"/>
-        <circle cx="5" cy="7" r="2.5" fill="#e84040"/>
-        <circle cx="9" cy="6" r="2" fill="#e8d040"/>
-        <circle cx="14" cy="7" r="2.5" fill="#d050a0"/>
-        <circle cx="19" cy="6" r="2" fill="#e84040"/>
-        <line x1="5" y1="9" x2="5" y2="7" stroke="#3a8020" stroke-width="0.8"/>
-        <line x1="9" y1="9" x2="9" y2="6" stroke="#3a8020" stroke-width="0.8"/>
-        <line x1="14" y1="9" x2="14" y2="7" stroke="#3a8020" stroke-width="0.8"/>
-        <line x1="19" y1="9" x2="19" y2="6" stroke="#3a8020" stroke-width="0.8"/>
-    </svg>`;
-    world.appendChild(flowers);
-
-    // Wheelbarrow near tack room
-    const wbX = yardIsoX(5, 13);
-    const wbY = yardIsoY(5, 13);
-    const wheelbarrow = document.createElement('div');
-    wheelbarrow.className = 'yard-decoration';
-    wheelbarrow.style.left = (wbX + 12) + 'px';
-    wheelbarrow.style.top = (wbY - 12) + 'px';
-    wheelbarrow.style.zIndex = yardIsoZ(5, 13) + 3;
-    wheelbarrow.innerHTML = `<svg viewBox="0 0 30 20" width="26" height="18" xmlns="http://www.w3.org/2000/svg">
-        <path d="M6,8 L12,4 L26,4 L28,10 L8,14 Z" fill="#7a8a7a" stroke="#5a6a5a" stroke-width="0.8"/>
-        <path d="M8,14 L6,8 L4,10" stroke="#6a5a4a" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <path d="M28,10 L26,14" stroke="#6a5a4a" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <circle cx="4" cy="14" r="3" fill="none" stroke="#5a4a3a" stroke-width="1.5"/>
-        <circle cx="4" cy="14" r="0.8" fill="#5a4a3a"/>
-    </svg>`;
-    world.appendChild(wheelbarrow);
-
-    // Weathervane on stable roof
-    const wvX = yardIsoX(9, 6);
-    const wvY = yardIsoY(9, 6);
-    const weathervane = document.createElement('div');
-    weathervane.className = 'yard-decoration';
-    weathervane.style.left = (wvX + 28) + 'px';
-    weathervane.style.top = (wvY - 68) + 'px';
-    weathervane.style.zIndex = yardIsoZ(9, 6) + 6;
-    weathervane.innerHTML = `<svg viewBox="0 0 24 30" width="18" height="24" xmlns="http://www.w3.org/2000/svg">
-        <line x1="12" y1="30" x2="12" y2="6" stroke="#444" stroke-width="1.2"/>
-        <line x1="4" y1="10" x2="20" y2="10" stroke="#444" stroke-width="0.8"/>
-        <text x="3" y="9" font-size="4" fill="#444" font-weight="bold">W</text>
-        <text x="18" y="9" font-size="4" fill="#444" font-weight="bold">E</text>
-        <!-- Horse silhouette -->
-        <path d="M7,6 Q8,3 10,2 Q11,1 12,1 Q13,1.5 14,3 Q15,2 16,2 Q17,2.5 17,4 Q16,5 14,5.5 L10,6 Q8,6.5 7,6 Z" fill="#444"/>
-        <polygon points="20,6 17,5 17,7" fill="#444"/>
-    </svg>`;
-    world.appendChild(weathervane);
 }
 
-function updatePlayerPosition() {
-    const player = document.getElementById('yard-player');
-    const x = yardIsoX(YardState.playerC, YardState.playerR);
-    const y = yardIsoY(YardState.playerC, YardState.playerR);
-    player.style.left = (x + 20) + 'px';
-    player.style.top = (y - 20) + 'px';
-    player.style.zIndex = yardIsoZ(YardState.playerC, YardState.playerR) + 10;
+function buildBarnContents() {
+    const world = document.getElementById('yard-world');
+    const horses = GameState.horses.filter(h => !h.isYearling);
+    const stallsPerSide = Math.floor(GameState.maxStalls / 2);
 
-    // Set silk colours on player
+    for (let s = 0; s < stallsPerSide; s++) {
+        const baseRow = 3 + s * 2;
+        const leftIdx = s;
+        if (leftIdx < horses.length) placeHorseInBarnStall(world, horses[leftIdx], baseRow, 1);
+        const rightIdx = s + stallsPerSide;
+        if (rightIdx < horses.length) placeHorseInBarnStall(world, horses[rightIdx], baseRow, 10);
+    }
+
+    addBarnLabel(world, 'Tack Room', 2, 0.2);
+    addBarnLabel(world, 'Feed Room', 11, 0.2);
+
+    const lastRow = 1 + 2 + stallsPerSide * 2;
+    addBarnLabel(world, 'EXIT', 6.2, lastRow - 0.5);
+}
+
+function addBarnLabel(world, text, col, row) {
+    const label = document.createElement('div');
+    label.className = 'yard-building-label';
+    label.textContent = text;
+    label.style.left = (col * TILE_SIZE) + 'px';
+    label.style.top = (row * TILE_SIZE + 8) + 'px';
+    label.style.zIndex = 15;
+    world.appendChild(label);
+}
+
+function placeHorseInBarnStall(world, horse, stallRow, stallCol) {
+    const body = horse.silkPrimary || '#6b3a1f';
+    const accent = horse.silkSecondary || '#5a2e16';
+    const el = document.createElement('div');
+    el.className = 'yard-decoration';
+    el.style.left = ((stallCol + 0.5) * TILE_SIZE) + 'px';
+    el.style.top = ((stallRow + 0.3) * TILE_SIZE) + 'px';
+    el.style.zIndex = 8;
+    el.innerHTML = `<svg viewBox="0 0 60 40" width="30" height="20">
+        <path d="M12,22 Q9,18 9,14 Q9,10 14,10 L30,9 Q34,7 37,4 Q39,2 42,2 Q46,1.5 47,3 Q49,3.5 50,6 Q50.5,8 49,9 L44,14 Q42,17 40,21 L38,24 Q28,20 16,24 Z" fill="${body}"/>
+        <path d="M36,5 Q34,3 33,6 Q31,4 30,7" stroke="${accent}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+        <path d="M12,22 Q8,20 6,22 Q4,25 7,27" stroke="${accent}" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+        <line x1="34" y1="23" x2="35" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="30" y1="23" x2="31" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="20" y1="24" x2="19" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="16" y1="24" x2="15" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="47" cy="4.5" r="1" fill="#222"/>
+    </svg>`;
+    world.appendChild(el);
+
+    const plate = document.createElement('div');
+    plate.className = 'yard-stall-nameplate';
+    plate.textContent = horse.name;
+    plate.style.left = (stallCol * TILE_SIZE) + 'px';
+    plate.style.top = ((stallRow - 0.4) * TILE_SIZE) + 'px';
+    world.appendChild(plate);
+}
+
+// --- Movement & Camera ---
+
+function isWalkable2D(r, c) {
+    const map = getCurrentMap();
+    if (!map || r < 0 || r >= map.length || c < 0 || c >= map[0].length) return false;
+    const t = map[r][c];
+    return YardState.currentZone === 'outdoor' ? TILE_WALK[t] : BARN_WALK[t];
+}
+
+function movePlayer2D(dr, dc) {
+    if (YardState.panelOpen) return;
+    const nr = YardState.playerR + dr;
+    const nc = YardState.playerC + dc;
+    if (!isWalkable2D(nr, nc)) return;
+
+    YardState.playerR = nr;
+    YardState.playerC = nc;
+
+    const player = document.getElementById('yard-player');
+    player.classList.add('walking');
+    clearTimeout(YardState.walkingTimeout);
+    YardState.walkingTimeout = setTimeout(() => player.classList.remove('walking'), 300);
+
+    updatePlayerPosition2D();
+    updateCamera2D();
+    checkInteractable2D();
+}
+
+function updatePlayerPosition2D() {
+    const player = document.getElementById('yard-player');
+    const viewport = document.querySelector('.yard-viewport');
+    if (!viewport) return;
+    // Player stays centered in the viewport; camera scrolls the world around them
+    player.style.left = (viewport.clientWidth / 2 - 12) + 'px';
+    player.style.top = (viewport.clientHeight / 2 - 18) + 'px';
+    player.style.zIndex = 50;
     player.style.setProperty('--silk-primary', GameState.silkPrimary);
     player.style.setProperty('--silk-secondary', GameState.silkSecondary);
 }
 
-function updateYardCamera() {
+function updateCamera2D() {
     const viewport = document.querySelector('.yard-viewport');
     if (!viewport) return;
     const vw = viewport.clientWidth;
     const vh = viewport.clientHeight;
-    const px = yardIsoX(YardState.playerC, YardState.playerR) + 32;
-    const py = yardIsoY(YardState.playerC, YardState.playerR) + 16;
+    const px = YardState.playerC * TILE_SIZE + TILE_SIZE / 2;
+    const py = YardState.playerR * TILE_SIZE + TILE_SIZE / 2;
     const tx = vw / 2 - px;
     const ty = vh / 2 - py;
-    const world = document.getElementById('yard-world');
-    world.style.transform = `translate(${tx}px, ${ty}px)`;
+    document.getElementById('yard-world').style.transform = `translate(${tx}px, ${ty}px)`;
 }
 
-function checkYardInteractable() {
+function checkInteractable2D() {
     const prompt = document.getElementById('yard-interact-prompt');
     const pr = YardState.playerR;
     const pc = YardState.playerC;
+    const interactables = YardState.currentZone === 'outdoor'
+        ? OUTDOOR_INTERACT : YardState.barnInteractables;
 
-    // Check adjacent + current tile
-    const checkPositions = [
-        { r: pr, c: pc },
-        { r: pr - 1, c: pc },
-        { r: pr + 1, c: pc },
-        { r: pr, c: pc - 1 },
-        { r: pr, c: pc + 1 },
-    ];
-
-    for (const pos of checkPositions) {
-        const ia = YARD_INTERACTABLES.find(i => i.gridR === pos.r && i.gridC === pos.c);
+    const checks = [{r:pr,c:pc},{r:pr-1,c:pc},{r:pr+1,c:pc},{r:pr,c:pc-1},{r:pr,c:pc+1}];
+    for (const pos of checks) {
+        const ia = interactables.find(i => i.r === pos.r && i.c === pos.c);
         if (ia) {
-            const x = yardIsoX(YardState.playerC, YardState.playerR);
-            const y = yardIsoY(YardState.playerC, YardState.playerR);
-            prompt.style.left = (x + 10) + 'px';
-            prompt.style.top = (y - 40) + 'px';
+            const viewport = document.querySelector('.yard-viewport');
+            prompt.style.left = (viewport.clientWidth / 2 - 40) + 'px';
+            prompt.style.top = (viewport.clientHeight / 2 - 54) + 'px';
             prompt.style.zIndex = 60;
             document.getElementById('yard-prompt-text').textContent = ia.prompt;
             prompt.style.display = 'flex';
@@ -5145,78 +5046,109 @@ function checkYardInteractable() {
             return;
         }
     }
-
     prompt.style.display = 'none';
     YardState._currentInteractable = null;
 }
 
-function moveYardPlayer(dr, dc) {
-    if (YardState.panelOpen) return;
-    const nr = YardState.playerR + dr;
-    const nc = YardState.playerC + dc;
-    if (!isWalkable(nr, nc)) return;
+// --- Input ---
 
-    YardState.playerR = nr;
-    YardState.playerC = nc;
-
-    // Walking animation
-    const player = document.getElementById('yard-player');
-    player.classList.add('walking');
-    clearTimeout(YardState.walkingTimeout);
-    YardState.walkingTimeout = setTimeout(() => player.classList.remove('walking'), 400);
-
-    updatePlayerPosition();
-    updateYardCamera();
-    checkYardInteractable();
+function onYardKeyDown(e) {
+    if (!YardState.active) return;
+    switch (e.key) {
+        case 'w': case 'W': case 'ArrowUp':    e.preventDefault(); movePlayer2D(-1, 0); break;
+        case 's': case 'S': case 'ArrowDown':   e.preventDefault(); movePlayer2D(1, 0); break;
+        case 'a': case 'A': case 'ArrowLeft':   e.preventDefault(); movePlayer2D(0, -1); break;
+        case 'd': case 'D': case 'ArrowRight':  e.preventDefault(); movePlayer2D(0, 1); break;
+        case 'e': case 'E':
+            e.preventDefault();
+            if (YardState.panelOpen) closeYardPanel();
+            else interactYard();
+            break;
+        case 'Escape':
+            e.preventDefault();
+            if (YardState.panelOpen) closeYardPanel();
+            break;
+    }
 }
 
-function interactAtPlayer() {
+// --- Interaction Dispatcher ---
+
+function interactYard() {
     const ia = YardState._currentInteractable;
     if (!ia) return;
-
     switch (ia.handler) {
-        case 'stall': handleStallInteract(ia); break;
-        case 'tack': handleTackInteract(); break;
-        case 'feed': handleFeedInteract(); break;
-        case 'office': handleOfficeInteract(); break;
-        case 'ring': handleRingInteract(); break;
-        case 'paddock': handlePaddockInteract(); break;
-        case 'gate': exitYard(); break;
+        case 'enter-barn':   enterBarn(); break;
+        case 'exit-barn':    exitBarn(); break;
+        case 'stall':        handleStallInteract2D(ia); break;
+        case 'tack-room':    handleTackRoomInteract(); break;
+        case 'feed-room':    handleFeedRoomInteract(); break;
+        case 'tack-store':   handleTackStoreInteract(); break;
+        case 'feed-mill':    handleFeedMillInteract(); break;
+        case 'tattersalls':  handleTattersallsInteract(); break;
+        case 'gallops':      leaveYardForScreen(); openGallops(); break;
+        case 'racecourse':   leaveYardForScreen(); openRaces(); break;
+        case 'expand-barn':  handleExpandBarn(); break;
     }
 }
 
-function handleStallInteract(ia) {
+// --- Zone Transitions ---
+
+function enterBarn() {
+    const fade = document.getElementById('yard-zone-fade');
+    fade.classList.add('active');
+    setTimeout(() => {
+        YardState.currentZone = 'barn';
+        YardState.barnMap = generateBarnMap();
+        YardState.barnInteractables = generateBarnInteractables();
+        const lastRow = YardState.barnMap.length - 1;
+        YardState.playerR = lastRow - 1;
+        YardState.playerC = 6;
+        buildZoneMap();
+        buildBarnContents();
+        requestAnimationFrame(() => {
+            updatePlayerPosition2D();
+            updateCamera2D();
+            checkInteractable2D();
+            fade.classList.remove('active');
+        });
+    }, 200);
+}
+
+function exitBarn() {
+    const fade = document.getElementById('yard-zone-fade');
+    fade.classList.add('active');
+    setTimeout(() => {
+        YardState.currentZone = 'outdoor';
+        YardState.playerR = 17;
+        YardState.playerC = 19;
+        buildZoneMap();
+        buildOutdoorBuildings();
+        buildOutdoorDecorations();
+        requestAnimationFrame(() => {
+            updatePlayerPosition2D();
+            updateCamera2D();
+            checkInteractable2D();
+            fade.classList.remove('active');
+        });
+    }, 200);
+}
+
+// --- Interaction Handlers ---
+
+function handleStallInteract2D(ia) {
     const idx = ia.stallIdx;
     const horses = GameState.horses.filter(h => !h.isYearling);
-
-    // Toggle door
-    const door = document.querySelector(`.yard-stall-door[data-stall-idx="${idx}"]`);
-    if (door) {
-        if (door.classList.contains('open')) {
-            door.classList.remove('open');
-            YardState.openDoors[idx] = false;
-            closeYardPanel();
-            return;
-        }
-        door.classList.add('open');
-        YardState.openDoors[idx] = true;
-    }
-
     if (idx >= horses.length) {
         showYardPanel('<h3>Empty Stall</h3><p>This stall is unoccupied. Buy more horses at Tattersalls!</p>');
         return;
     }
-
     const h = horses[idx];
     const condClass = h.condition >= 70 ? 'color:var(--color-success)' : h.condition >= 40 ? 'color:var(--color-warning)' : 'color:var(--color-danger)';
     const trainingText = h.trainingFocus ? capitalizeFirst(h.trainingFocus) : 'None';
-
     showYardPanel(`
         <h3>${h.name}</h3>
         <div class="yard-horse-info">
-            <div>
-                <span style="font-size:0.85rem;color:var(--color-text-light)">${h.age} yrs · OR ${h.officialRating || '--'}</span>
-            </div>
+            <span style="font-size:0.85rem;color:var(--color-text-light)">${h.age} yrs \u00B7 OR ${h.officialRating || '--'}</span>
         </div>
         <div class="yard-stat-row"><span class="stat-label">Speed</span><span class="stat-value">${h.speed}</span></div>
         <div class="yard-stat-row"><span class="stat-label">Stamina</span><span class="stat-value">${h.stamina}</span></div>
@@ -5229,174 +5161,247 @@ function handleStallInteract(ia) {
     `);
 }
 
-function handleTackInteract() {
-    const count = GameState.horses.length;
+function handleTackRoomInteract() {
+    const t = GameState.tack;
     showYardPanel(`
         <h3>Tack Room</h3>
-        <p>Saddles hung neatly on racks, bridles polished and ready.</p>
-        <div class="yard-stat-row"><span class="stat-label">Saddles</span><span class="stat-value">${count}</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Bridles</span><span class="stat-value">${count}</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Horse Rugs</span><span class="stat-value">${count * 2}</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Girths</span><span class="stat-value">${count}</span></div>
-        <p style="margin-top:var(--space-md);font-style:italic;color:var(--color-text-muted)">Everything is in order. The lads keep a tidy ship.</p>
+        <p>Saddles, bridles, and rugs ready for your horses.</p>
+        <div class="yard-stat-row"><span class="stat-label">Saddles</span><span class="stat-value">${t.saddles}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Bridles</span><span class="stat-value">${t.bridles}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Rugs</span><span class="stat-value">${t.rugs}</span></div>
+        <p style="margin-top:var(--space-md);font-style:italic;color:var(--color-text-muted)">Visit the Tack Store outside to buy more.</p>
     `);
 }
 
-function handleFeedInteract() {
-    const count = GameState.horses.length;
-    const weeklyCost = count * 350;
+function handleFeedRoomInteract() {
     showYardPanel(`
-        <h3>Feed Store</h3>
-        <p>Bags of oats, hay bales, and supplements stacked high.</p>
-        <div class="yard-stat-row"><span class="stat-label">Horses to Feed</span><span class="stat-value">${count}</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Weekly Feed Cost</span><span class="stat-value">\u00A3${formatMoney(weeklyCost)}</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Hay Bales</span><span class="stat-value">${count * 4}</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Oats (bags)</span><span class="stat-value">${count * 2}</span></div>
-        <p style="margin-top:var(--space-md);font-style:italic;color:var(--color-text-muted)">Supplies are well stocked for the season ahead.</p>
+        <h3>Feed Room</h3>
+        <p>Current feed supply for your horses.</p>
+        <div class="yard-stat-row"><span class="stat-label">Feed Units</span><span class="stat-value">${GameState.feedSupply}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Horses to Feed</span><span class="stat-value">${GameState.horses.filter(h => !h.isYearling).length}</span></div>
+        <p style="margin-top:var(--space-md);font-style:italic;color:var(--color-text-muted)">Visit the Feed Mill outside to buy more.</p>
     `);
 }
 
-function handleOfficeInteract() {
-    const sorted = [...GameState.standings].sort((a, b) => b.points - a.points);
-    const playerRank = sorted.findIndex(s => s.isPlayer) + 1;
-    const playerPts = sorted.find(s => s.isPlayer)?.points || 0;
-    const nextRace = GameState.races[GameState.currentRaceIndex];
-    const nextRaceText = nextRace && !nextRace.completed ? nextRace.name : 'Season complete';
-
-    let standingsHTML = sorted.slice(0, 5).map((s, i) =>
-        `<div class="yard-stat-row"><span class="stat-label">${i + 1}. ${s.name}${s.isPlayer ? ' (You)' : ''}</span><span class="stat-value">${s.points} pts</span></div>`
-    ).join('');
-
+function handleTackStoreInteract() {
+    const t = GameState.tack;
+    const budget = GameState.budget;
     showYardPanel(`
-        <h3>Trainer's Office</h3>
-        <div class="yard-stat-row"><span class="stat-label">Season</span><span class="stat-value">${GameState.season}</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Budget</span><span class="stat-value">\u00A3${formatMoney(GameState.budget)}</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Standing</span><span class="stat-value">${getOrdinal(playerRank)} (${playerPts} pts)</span></div>
-        <div class="yard-stat-row"><span class="stat-label">Next Race</span><span class="stat-value">${nextRaceText}</span></div>
-        <h3 style="margin-top:var(--space-md)">Standings</h3>
-        ${standingsHTML}
+        <h3>Tack Store</h3>
+        <p>Purchase equipment for your horses.</p>
+        <div class="yard-stat-row"><span class="stat-label">Your Budget</span><span class="stat-value">\u00A3${formatMoney(budget)}</span></div>
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        <div class="yard-buy-row">
+            <span>Saddle (\u00A32,000) \u2014 Own: ${t.saddles}</span>
+            <button class="yard-buy-btn" onclick="buyTack('saddles',1)" ${budget < 2000 ? 'disabled' : ''}>Buy</button>
+        </div>
+        <div class="yard-buy-row">
+            <span>Bridle (\u00A3800) \u2014 Own: ${t.bridles}</span>
+            <button class="yard-buy-btn" onclick="buyTack('bridles',1)" ${budget < 800 ? 'disabled' : ''}>Buy</button>
+        </div>
+        <div class="yard-buy-row">
+            <span>Rug (\u00A3400) \u2014 Own: ${t.rugs}</span>
+            <button class="yard-buy-btn" onclick="buyTack('rugs',1)" ${budget < 400 ? 'disabled' : ''}>Buy</button>
+        </div>
     `);
 }
 
-function handleRingInteract() {
-    const trainingHorses = GameState.horses.filter(h => h.trainingFocus && !h.isYearling);
-    let listHTML;
-    if (trainingHorses.length === 0) {
-        listHTML = '<p>The training ring is empty. Set a training focus for your horses in the stable screen.</p>';
-    } else {
-        listHTML = trainingHorses.map(h =>
-            `<div class="yard-stat-row"><span class="stat-label">${h.name}</span><span class="stat-value">${capitalizeFirst(h.trainingFocus)}</span></div>`
-        ).join('');
-    }
-    showYardPanel(`<h3>Training Ring</h3><p>Horses currently in training:</p>${listHTML}`);
+function handleFeedMillInteract() {
+    const budget = GameState.budget;
+    const unitPrice = 500;
+    showYardPanel(`
+        <h3>Feed Mill</h3>
+        <p>Buy feed for your horses. Current supply: <strong>${GameState.feedSupply} units</strong></p>
+        <div class="yard-stat-row"><span class="stat-label">Price per Unit</span><span class="stat-value">\u00A3${formatMoney(unitPrice)}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Your Budget</span><span class="stat-value">\u00A3${formatMoney(budget)}</span></div>
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        <div class="yard-buy-row">
+            <span>10 units (\u00A3${formatMoney(10 * unitPrice)})</span>
+            <button class="yard-buy-btn" onclick="buyFeed(10)" ${budget < 10 * unitPrice ? 'disabled' : ''}>Buy</button>
+        </div>
+        <div class="yard-buy-row">
+            <span>20 units (\u00A3${formatMoney(20 * unitPrice)})</span>
+            <button class="yard-buy-btn" onclick="buyFeed(20)" ${budget < 20 * unitPrice ? 'disabled' : ''}>Buy</button>
+        </div>
+        <div class="yard-buy-row">
+            <span>50 units (\u00A3${formatMoney(50 * unitPrice)})</span>
+            <button class="yard-buy-btn" onclick="buyFeed(50)" ${budget < 50 * unitPrice ? 'disabled' : ''}>Buy</button>
+        </div>
+    `);
 }
 
-function handlePaddockInteract() {
-    const yearlings = GameState.horses.filter(h => h.isYearling);
-    let listHTML;
-    if (yearlings.length === 0) {
-        listHTML = '<p>The paddock is empty. Buy yearlings at the yearling sale to see them grazing here.</p>';
-    } else {
-        listHTML = yearlings.map(h =>
-            `<div class="yard-stat-row"><span class="stat-label">${h.name}</span><span class="stat-value">Yearling</span></div>`
-        ).join('');
-    }
-    showYardPanel(`<h3>Paddock</h3><p>Yearlings grazing peacefully:</p>${listHTML}`);
+function handleTattersallsInteract() {
+    showYardPanel(`
+        <h3>Tattersall's</h3>
+        <p>The famous bloodstock sales ring. What are you here for?</p>
+        <div style="display:flex;gap:var(--space-md);margin-top:var(--space-lg);">
+            <button class="btn btn-primary" onclick="closeYardPanel();leaveYardForScreen();openAuction();" style="flex:1;">Horse Auction</button>
+            <button class="btn btn-secondary" onclick="closeYardPanel();leaveYardForScreen();openYearlingSale();" style="flex:1;">Yearling Sale</button>
+        </div>
+    `);
 }
+
+function handleExpandBarn() {
+    const cost = 100000;
+    const canExpand = GameState.maxStalls < 20;
+    const canAfford = GameState.budget >= cost;
+    if (!canExpand) {
+        showYardPanel('<h3>Barn Expansion</h3><p>The barn is already at maximum capacity (20 stalls).</p>');
+        return;
+    }
+    showYardPanel(`
+        <h3>Barn Expansion</h3>
+        <p>Add 2 more stalls to your barn.</p>
+        <div class="yard-stat-row"><span class="stat-label">Current Stalls</span><span class="stat-value">${GameState.maxStalls}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">After Expansion</span><span class="stat-value">${GameState.maxStalls + 2}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Cost</span><span class="stat-value">\u00A3${formatMoney(cost)}</span></div>
+        <button class="btn btn-primary" onclick="expandBarn()" style="width:100%;margin-top:var(--space-md);" ${!canAfford ? 'disabled' : ''}>
+            ${canAfford ? 'Expand Barn' : 'Insufficient Funds'}
+        </button>
+    `);
+}
+
+// --- Panel ---
 
 function showYardPanel(contentHTML) {
-    const panel = document.getElementById('yard-panel');
     document.getElementById('yard-panel-content').innerHTML = contentHTML;
-    panel.style.display = 'block';
+    document.getElementById('yard-panel').style.display = 'block';
     YardState.panelOpen = true;
 }
 
 function closeYardPanel() {
-    document.getElementById('yard-panel').style.display = 'none';
+    const panel = document.getElementById('yard-panel');
+    if (panel) panel.style.display = 'none';
     YardState.panelOpen = false;
-
-    // Close all open doors
-    document.querySelectorAll('.yard-stall-door.open').forEach(d => d.classList.remove('open'));
-    YardState.openDoors = {};
 }
 
-function onYardKeyDown(e) {
-    if (!YardState.active) return;
+// --- Economy Functions ---
 
-    switch (e.key) {
-        case 'w': case 'W': case 'ArrowUp':    e.preventDefault(); moveYardPlayer(-1, 0); break;
-        case 's': case 'S': case 'ArrowDown':   e.preventDefault(); moveYardPlayer(1, 0); break;
-        case 'a': case 'A': case 'ArrowLeft':   e.preventDefault(); moveYardPlayer(0, -1); break;
-        case 'd': case 'D': case 'ArrowRight':  e.preventDefault(); moveYardPlayer(0, 1); break;
-        case 'e': case 'E':
-            e.preventDefault();
-            if (YardState.panelOpen) {
-                closeYardPanel();
-            } else {
-                interactAtPlayer();
-            }
-            break;
-        case 'Escape':
-            e.preventDefault();
-            if (YardState.panelOpen) {
-                closeYardPanel();
-            } else {
-                exitYard();
-            }
-            break;
-    }
-}
-
-function openYard() {
-    if (GameState.horses.length === 0) {
-        gameAlert('The Yard', 'Your yard is empty! Buy some horses first.');
+function buyFeed(amount) {
+    const unitPrice = 500;
+    const cost = amount * unitPrice;
+    if (GameState.budget < cost) {
+        gameAlert('Insufficient Funds', `You need \u00A3${formatMoney(cost)} to buy ${amount} units of feed.`);
         return;
     }
+    GameState.budget -= cost;
+    GameState.feedSupply += amount;
+    updateYardHUD();
+    handleFeedMillInteract();
+}
 
+function buyTack(type, qty) {
+    const prices = { saddles: 2000, bridles: 800, rugs: 400 };
+    const cost = qty * prices[type];
+    if (GameState.budget < cost) {
+        gameAlert('Insufficient Funds', `You need \u00A3${formatMoney(cost)}.`);
+        return;
+    }
+    GameState.budget -= cost;
+    GameState.tack[type] += qty;
+    updateYardHUD();
+    handleTackStoreInteract();
+}
+
+function consumeFeed() {
+    const horseCount = GameState.horses.filter(h => !h.isYearling).length;
+    if (horseCount === 0) return { consumed: 0, shortage: false };
+    const needed = horseCount;
+    const consumed = Math.min(needed, GameState.feedSupply);
+    GameState.feedSupply -= consumed;
+    if (consumed < needed) {
+        GameState.horses.forEach(h => {
+            if (!h.isYearling) h.condition = Math.max(0, h.condition - 15);
+        });
+        return { consumed, shortage: true, missing: needed - consumed };
+    }
+    return { consumed, shortage: false };
+}
+
+function expandBarn() {
+    const cost = 100000;
+    if (GameState.maxStalls >= 20) {
+        gameAlert('Maximum Size', 'The barn is already at maximum capacity (20 stalls).');
+        return;
+    }
+    if (GameState.budget < cost) {
+        gameAlert('Insufficient Funds', `Barn expansion costs \u00A3${formatMoney(cost)}.`);
+        return;
+    }
+    GameState.budget -= cost;
+    GameState.maxStalls += 2;
+    GameState.barnExpansions++;
+    updateYardHUD();
+    if (YardState.currentZone === 'barn') {
+        YardState.barnMap = generateBarnMap();
+        YardState.barnInteractables = generateBarnInteractables();
+        buildZoneMap();
+        buildBarnContents();
+        updatePlayerPosition2D();
+        updateCamera2D();
+        checkInteractable2D();
+    }
+    handleExpandBarn();
+}
+
+// --- Hub Routing ---
+
+function openYardHub() {
     YardState.active = true;
-    YardState.playerR = 9;
-    YardState.playerC = 10;
-    YardState.openDoors = {};
+    YardState.currentZone = 'outdoor';
+    YardState.playerR = 18;
+    YardState.playerC = 19;
     YardState.panelOpen = false;
+    YardState._currentInteractable = null;
 
-    buildYardTiles();
-    buildYardBuildings();
-    buildYardStalls();
-    placeHorsesInStalls();
-    placeYardExtras();
-    updatePlayerPosition();
+    YardState.outdoorMap = generateOutdoorMap();
+    YardState.barnMap = generateBarnMap();
+    YardState.barnInteractables = generateBarnInteractables();
+
+    buildZoneMap();
+    buildOutdoorBuildings();
+    buildOutdoorDecorations();
+    updateYardHUD();
 
     showScreen('yard');
+    window.scrollTo(0, 0);
 
-    // Delay camera update to after layout
+    // Position player and camera after screen is visible (so viewport has dimensions)
     requestAnimationFrame(() => {
-        updateYardCamera();
-        checkYardInteractable();
+        updatePlayerPosition2D();
+        updateCamera2D();
+        checkInteractable2D();
     });
 
-    // Add keyboard listeners
+    if (YardState.keyHandler) {
+        document.removeEventListener('keydown', YardState.keyHandler);
+    }
     YardState.keyHandler = onYardKeyDown;
     document.addEventListener('keydown', YardState.keyHandler);
 }
 
-function exitYard() {
+function returnToYard() {
+    openYardHub();
+}
+
+function leaveYardForScreen() {
     YardState.active = false;
     closeYardPanel();
-
     if (YardState.keyHandler) {
         document.removeEventListener('keydown', YardState.keyHandler);
         YardState.keyHandler = null;
     }
+}
 
-    // Clean up stall interactables (remove dynamic ones)
-    for (let i = YARD_INTERACTABLES.length - 1; i >= 0; i--) {
-        if (YARD_INTERACTABLES[i].id.startsWith('stall')) {
-            YARD_INTERACTABLES.splice(i, 1);
-        }
-    }
-
-    updateDashboard();
-    showScreen('dashboard');
+function updateYardHUD() {
+    const horses = GameState.horses.filter(h => !h.isYearling);
+    const el = id => document.getElementById(id);
+    if (el('yard-stable-name')) el('yard-stable-name').textContent = GameState.stableName;
+    if (el('yard-budget')) el('yard-budget').textContent = formatMoney(GameState.budget);
+    if (el('yard-season')) el('yard-season').textContent = GameState.season;
+    if (el('yard-feed-count')) el('yard-feed-count').textContent = GameState.feedSupply;
+    if (el('yard-horse-count')) el('yard-horse-count').textContent = horses.length;
+    if (el('yard-stall-count')) el('yard-stall-count').textContent = GameState.maxStalls;
 }
 
 // Make functions globally available
@@ -5411,6 +5416,14 @@ window.openGallops = openGallops;
 window.selectGallopsYearling = selectGallopsYearling;
 window.selectGallopsFocus = selectGallopsFocus;
 window.runSellingAuction = runSellingAuction;
+window.buyFeed = buyFeed;
+window.buyTack = buyTack;
+window.expandBarn = expandBarn;
+window.leaveYardForScreen = leaveYardForScreen;
+window.closeYardPanel = closeYardPanel;
+window.openAuction = openAuction;
+window.openYearlingSale = openYearlingSale;
+
 
 // ============================================
 // EVENT LISTENERS
@@ -5437,9 +5450,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('btn-continue').addEventListener('click', () => {
-        if (loadGame()) {
-            showScreen('dashboard');
-        }
+        loadGame();
     });
 
     document.getElementById('btn-how-to-play').addEventListener('click', () => {
@@ -5492,7 +5503,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-back-dashboard').addEventListener('click', async () => {
         const confirmed = await gameConfirm('Leave Auction', 'Any bids set will be lost.');
         if (confirmed) {
-            showScreen('dashboard');
+            returnToYard();
         }
     });
 
@@ -5506,7 +5517,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-yearling-back-dashboard').addEventListener('click', async () => {
         const confirmed = await gameConfirm('Leave Yearling Sale', 'Any bids set will be lost.');
         if (confirmed) {
-            showScreen('dashboard');
+            returnToYard();
         }
     });
 
@@ -5518,9 +5529,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('nav-gallops').addEventListener('click', () => openGallops());
 
     // The Yard buttons
-    document.getElementById('nav-yard').addEventListener('click', () => openYard());
-
-    document.getElementById('btn-yard-back').addEventListener('click', () => exitYard());
+    document.getElementById('btn-yard-back').addEventListener('click', async () => {
+        const confirmed = await gameConfirm('Return to Menu', "Make sure you've saved your game!");
+        if (confirmed) {
+            leaveYardForScreen();
+            showScreen('main-menu');
+            updateContinueButton();
+        }
+    });
 
     document.getElementById('btn-yard-panel-close').addEventListener('click', () => closeYardPanel());
 
@@ -5531,10 +5547,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (GallopsState.gallopsInterval) { clearInterval(GallopsState.gallopsInterval); GallopsState.gallopsInterval = null; }
                 if (GallopsState.hoofStop) { GallopsState.hoofStop(); GallopsState.hoofStop = null; }
                 GallopsState.isGalloping = false;
-                showScreen('dashboard');
+                returnToYard();
             }
         } else {
-            showScreen('dashboard');
+            returnToYard();
         }
     });
 
@@ -5559,8 +5575,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('btn-gallops-dashboard').addEventListener('click', () => {
-        updateDashboard();
-        showScreen('dashboard');
+        returnToYard();
     });
 
     // Selling auction buttons
@@ -5569,7 +5584,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Stable buttons
     document.getElementById('btn-stable-back').addEventListener('click', () => {
-        showScreen('dashboard');
+        returnToYard();
     });
 
     document.getElementById('btn-go-to-auction').addEventListener('click', () => {
@@ -5602,10 +5617,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (RaceState.crowdStop) { RaceState.crowdStop(); RaceState.crowdStop = null; }
                 if (RaceState.hoofStop) { RaceState.hoofStop(); RaceState.hoofStop = null; }
                 RaceState.isRacing = false;
-                showScreen('dashboard');
+                returnToYard();
             }
         } else {
-            showScreen('dashboard');
+            returnToYard();
         }
     });
 
@@ -5628,6 +5643,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Phase 4: Mute buttons
     document.getElementById('btn-mute').addEventListener('click', () => SoundManager.toggleMute());
     document.getElementById('btn-mute-menu').addEventListener('click', () => SoundManager.toggleMute());
+    document.getElementById('btn-mute-yard').addEventListener('click', () => SoundManager.toggleMute());
 });
 
 // Debug

@@ -245,7 +245,7 @@
                     <div id="horses-won" class="horses-won">
                         <!-- Populated by JS -->
                     </div>
-                    <button id="btn-finish-auction" class="btn btn-primary">Return to Dashboard</button>
+                    <button id="btn-finish-auction" class="btn btn-primary">Return to Yard</button>
                 </div>
             </div>
         </div>
@@ -323,7 +323,7 @@
                     <div id="yearlings-won" class="horses-won">
                         <!-- Populated by JS -->
                     </div>
-                    <button id="btn-finish-yearling-sale" class="btn btn-primary">Return to Dashboard</button>
+                    <button id="btn-finish-yearling-sale" class="btn btn-primary">Return to Yard</button>
                 </div>
             </div>
         </div>
@@ -737,22 +737,31 @@
             </div>
             <div class="gallops-results-actions">
                 <button id="btn-gallops-another" class="btn btn-primary">Return to Gallops</button>
-                <button id="btn-gallops-dashboard" class="btn btn-secondary">Return to Dashboard</button>
+                <button id="btn-gallops-dashboard" class="btn btn-secondary">Return to Yard</button>
             </div>
         </div>
     </div>
 
-    <!-- The Yard Screen -->
+    <!-- The Yard Screen (Hub World) -->
     <div id="yard" class="screen">
-        <header class="game-header">
+        <header class="game-header yard-header">
             <div class="header-left">
-                <button id="btn-yard-back" class="btn-icon">← Back</button>
-                <span class="page-title">The Yard</span>
+                <span class="logo-small" id="yard-stable-name">Your Stable</span>
+            </div>
+            <div class="header-center">
+                <span class="budget-display">£<span id="yard-budget">500,000</span></span>
+                <span class="season-display">Season <span id="yard-season">1</span></span>
             </div>
             <div class="header-right">
-                <span class="yard-controls-hint">WASD to move · E to interact</span>
+                <span class="yard-controls-hint">WASD · E interact</span>
+                <button id="btn-mute-yard" class="btn-mute" title="Toggle sound">🔊</button>
+                <button id="btn-yard-back" class="btn-icon" title="Save & Quit">☰</button>
             </div>
         </header>
+        <div class="yard-hud" id="yard-hud">
+            <div class="yard-hud-item" id="yard-hud-feed" title="Feed Supply">🌾 <span id="yard-feed-count">20</span></div>
+            <div class="yard-hud-item" id="yard-hud-horses" title="Horses / Stalls">🐴 <span id="yard-horse-count">0</span>/<span id="yard-stall-count">10</span></div>
+        </div>
         <div class="yard-viewport">
             <div class="yard-world" id="yard-world">
                 <!-- Tiles and buildings rendered by JS -->
@@ -776,6 +785,7 @@
                 <span class="yard-prompt-key">E</span>
                 <span class="yard-prompt-text" id="yard-prompt-text">Interact</span>
             </div>
+            <div class="yard-zone-fade" id="yard-zone-fade"></div>
         </div>
         <div class="yard-panel" id="yard-panel" style="display:none;">
             <button class="yard-panel-close" id="btn-yard-panel-close">×</button>
