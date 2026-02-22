@@ -4687,6 +4687,7 @@ const OUTDOOR_BLDGS = [
     { id: 'racecourse',  label: 'Racecourse',    r: 24, c: 28, w: 9,  h: 4, css: 'racecourse' },
     { id: 'forage',      label: 'Forage & Bedding', r: 25, c: 3,  w: 6, h: 3, css: 'forage' },
     { id: 'supplier',    label: 'Stable Supplier',  r: 25, c: 14, w: 6, h: 3, css: 'supplier' },
+    { id: 'trainer-house', label: "Trainer's House", r: 3, c: 16, w: 7, h: 4, css: 'trainer-house' },
 ];
 
 // Outdoor interactables
@@ -4707,6 +4708,8 @@ const OUTDOOR_INTERACT = [
     { id: 'for-2',    r: 24, c: 6,  prompt: 'Visit Forage & Bedding', handler: 'forage' },
     { id: 'sup-1',    r: 24, c: 16, prompt: 'Visit Stable Supplier',  handler: 'supplier' },
     { id: 'sup-2',    r: 24, c: 17, prompt: 'Visit Stable Supplier',  handler: 'supplier' },
+    { id: 'th-1',     r: 7,  c: 19, prompt: "Enter Trainer's House",  handler: 'trainer-house' },
+    { id: 'th-2',     r: 7,  c: 20, prompt: "Enter Trainer's House",  handler: 'trainer-house' },
 ];
 
 const YardState = {
@@ -4769,6 +4772,9 @@ function generateOutdoorMap() {
 
     // Small pond
     fill(20, 25, 22, 26, T_WATER);
+
+    // North path to Trainer's House (cols 19-20, row 7)
+    map[7][19] = T_PATH; map[7][20] = T_PATH;
 
     // Buildings (solid, placed last to overwrite)
     OUTDOOR_BLDGS.forEach(b => fill(b.r, b.c, b.r + b.h - 1, b.c + b.w - 1, T_BLDG));
@@ -5140,6 +5146,7 @@ function interactYard() {
         case 'expand-barn':  handleExpandBarn(); break;
         case 'forage':       handleForageInteract(); break;
         case 'supplier':     handleSupplierInteract(); break;
+        case 'trainer-house': handleTrainerHouseInteract(); break;
     }
 }
 
@@ -5396,6 +5403,22 @@ function handleSupplierInteract() {
         ${expandRow}
         <h4 style="margin:var(--space-sm) 0;">Upgrades</h4>
         ${upgradeRows}
+    `);
+}
+
+function handleTrainerHouseInteract() {
+    GameState.lastSaved = new Date().toISOString();
+    const saveData = JSON.stringify(GameState);
+    localStorage.setItem('championTrainer_save', saveData);
+    const horses = GameState.horses.filter(h => !h.isYearling);
+    showYardPanel(`
+        <h3>Trainer's House</h3>
+        <p style="color:var(--color-success);font-weight:600;">Game saved!</p>
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        <div class="yard-stat-row"><span class="stat-label">Stable</span><span class="stat-value">${GameState.stableName}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Season</span><span class="stat-value">${GameState.season}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Budget</span><span class="stat-value">£${formatMoney(GameState.budget)}</span></div>
+        <div class="yard-stat-row"><span class="stat-label">Horses</span><span class="stat-value">${horses.length}</span></div>
     `);
 }
 

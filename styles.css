@@ -3992,6 +3992,9 @@ body {
 .yard-building-2d.supplier {
     background: linear-gradient(135deg, #6a7a8a, #5a6a7a);
 }
+.yard-building-2d.trainer-house {
+    background: linear-gradient(135deg, #a07860, #8a6850);
+}
 
 /* Building label */
 .yard-building-label {
