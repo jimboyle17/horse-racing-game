@@ -4784,8 +4784,9 @@ function generateOutdoorMap() {
 
 function generateBarnMap() {
     const stallsPerSide = Math.floor(GameState.maxStalls / 2);
-    const roomStart = stallsPerSide * 3;
-    const rows = stallsPerSide * 3 + 3;   // stalls + tack/feed rooms (2 rows) + exit row
+    const roomHeight = 4;
+    const roomStart = stallsPerSide * 3 + 1;       // +1 so wall gap at stallsPerSide*3 stays intact
+    const rows = roomStart + roomHeight + 1;        // rooms + exit row
     const cols = BARN_COLS;
     const map = Array.from({length: rows}, () => new Array(cols).fill(B_WALL));
     const lastRow = rows - 1;
@@ -4812,19 +4813,15 @@ function generateBarnMap() {
         // Row baseRow+2 stays B_WALL at stall cols (containment gap)
     }
 
-    // Tack Room (left, near entrance)
-    for (let c = 1; c <= 3; c++) {
-        map[roomStart][c] = B_ROOM;
-        map[roomStart + 1][c] = B_ROOM;
-    }
-    map[roomStart + 1][4] = B_DOOR;
+    // Tack Room (left, 4 rows)
+    for (let r = roomStart; r < roomStart + roomHeight; r++)
+        for (let c = 1; c <= 3; c++) map[r][c] = B_ROOM;
+    map[roomStart + roomHeight - 1][4] = B_DOOR;
 
-    // Feed Room (right, near entrance)
-    for (let c = 10; c <= 12; c++) {
-        map[roomStart][c] = B_ROOM;
-        map[roomStart + 1][c] = B_ROOM;
-    }
-    map[roomStart + 1][9] = B_DOOR;
+    // Feed Room (right, 4 rows)
+    for (let r = roomStart; r < roomStart + roomHeight; r++)
+        for (let c = 10; c <= 12; c++) map[r][c] = B_ROOM;
+    map[roomStart + roomHeight - 1][9] = B_DOOR;
 
     // Exit doors at south wall
     for (let c = 5; c <= 8; c++) map[lastRow][c] = B_DOOR;
@@ -4834,14 +4831,14 @@ function generateBarnMap() {
 
 function generateBarnInteractables() {
     const stallsPerSide = Math.floor(GameState.maxStalls / 2);
-    const roomStart = stallsPerSide * 3;
-    const lastRow = stallsPerSide * 3 + 2;
+    const roomStart = stallsPerSide * 3 + 1;
+    const lastRow = roomStart + 4;
     const horses = GameState.horses.filter(h => !h.isYearling);
     const list = [];
 
     // Tack/Feed room interactables (near entrance, south end)
-    list.push({ id: 'tack-room', r: roomStart + 1, c: 4, prompt: 'Look in Tack Room', handler: 'tack-room' });
-    list.push({ id: 'feed-room', r: roomStart + 1, c: 9, prompt: 'Look in Feed Room', handler: 'feed-room' });
+    list.push({ id: 'tack-room', r: roomStart + 3, c: 4, prompt: 'Look in Tack Room', handler: 'tack-room' });
+    list.push({ id: 'feed-room', r: roomStart + 3, c: 9, prompt: 'Look in Feed Room', handler: 'feed-room' });
 
     // Stall interactables INSIDE each stall (not at the door)
     for (let s = 0; s < stallsPerSide; s++) {
@@ -4974,8 +4971,8 @@ function buildBarnContents() {
     const world = document.getElementById('yard-world');
     const horses = GameState.horses.filter(h => !h.isYearling);
     const stallsPerSide = Math.floor(GameState.maxStalls / 2);
-    const roomStart = stallsPerSide * 3;
-    const lastRow = stallsPerSide * 3 + 2;
+    const roomStart = stallsPerSide * 3 + 1;
+    const lastRow = roomStart + 4;
 
     for (let s = 0; s < stallsPerSide; s++) {
         const baseRow = 1 + s * 3;
@@ -4985,10 +4982,62 @@ function buildBarnContents() {
         if (rightIdx < horses.length) placeHorseInBarnStall(world, horses[rightIdx], baseRow, 10);
     }
 
-    addBarnLabel(world, 'Tack Room', 2, roomStart - 0.5);
-    addBarnLabel(world, 'Feed Room', 11, roomStart - 0.5);
+    addBarnLabel(world, 'Tack Room', 2, roomStart + 1);
+    addBarnLabel(world, 'Feed Room', 11, roomStart + 1);
 
     addBarnLabel(world, 'EXIT', 6.2, lastRow - 0.5);
+
+    // Feed Room decorations — feed sacks
+    const feedSacks = [
+        { r: roomStart + 0.3, c: 10.3 },
+        { r: roomStart + 1.5, c: 11.5 },
+        { r: roomStart + 2.5, c: 10.8 }
+    ];
+    feedSacks.forEach(pos => {
+        const el = document.createElement('div');
+        el.className = 'yard-decoration';
+        el.style.left = (pos.c * TILE_SIZE) + 'px';
+        el.style.top = (pos.r * TILE_SIZE) + 'px';
+        el.style.zIndex = 8;
+        el.innerHTML = `<svg viewBox="0 0 30 36" width="20" height="24">
+            <rect x="3" y="6" width="24" height="28" rx="3" fill="#c4a265"/>
+            <rect x="3" y="6" width="24" height="28" rx="3" fill="none" stroke="#8b7340" stroke-width="1.5"/>
+            <line x1="7" y1="6" x2="7" y2="34" stroke="#8b7340" stroke-width="0.8" opacity="0.5"/>
+            <line x1="23" y1="6" x2="23" y2="34" stroke="#8b7340" stroke-width="0.8" opacity="0.5"/>
+            <path d="M8,6 Q15,2 22,6" fill="#c4a265" stroke="#8b7340" stroke-width="1"/>
+            <text x="15" y="22" text-anchor="middle" font-size="6" fill="#5a4420" font-weight="bold">FEED</text>
+        </svg>`;
+        world.appendChild(el);
+    });
+
+    // Tack Room decorations — saddle on rack and bridle hook
+    const saddleEl = document.createElement('div');
+    saddleEl.className = 'yard-decoration';
+    saddleEl.style.left = (1.3 * TILE_SIZE) + 'px';
+    saddleEl.style.top = ((roomStart + 0.4) * TILE_SIZE) + 'px';
+    saddleEl.style.zIndex = 8;
+    saddleEl.innerHTML = `<svg viewBox="0 0 40 36" width="26" height="23">
+        <rect x="10" y="28" width="20" height="6" rx="1" fill="#6b4226"/>
+        <rect x="8" y="26" width="24" height="4" rx="1" fill="#8b5a2e"/>
+        <path d="M12,26 Q20,10 28,26" fill="#5a3018" stroke="#3e2010" stroke-width="1"/>
+        <path d="M14,24 Q20,14 26,24" fill="#6b3a1f" stroke="#3e2010" stroke-width="0.8"/>
+        <rect x="18" y="16" width="4" height="6" rx="1" fill="#8b5a2e"/>
+    </svg>`;
+    world.appendChild(saddleEl);
+
+    const bridleEl = document.createElement('div');
+    bridleEl.className = 'yard-decoration';
+    bridleEl.style.left = (2.5 * TILE_SIZE) + 'px';
+    bridleEl.style.top = ((roomStart + 2) * TILE_SIZE) + 'px';
+    bridleEl.style.zIndex = 8;
+    bridleEl.innerHTML = `<svg viewBox="0 0 30 40" width="18" height="24">
+        <circle cx="15" cy="6" r="4" fill="#555" stroke="#333" stroke-width="1.5"/>
+        <path d="M15,10 L15,18 Q10,22 8,28 Q6,34 10,36" fill="none" stroke="#5a3018" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M15,18 Q20,22 22,28 Q24,34 20,36" fill="none" stroke="#5a3018" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="10" cy="36" r="2" fill="#888" stroke="#555" stroke-width="1"/>
+        <circle cx="20" cy="36" r="2" fill="#888" stroke="#555" stroke-width="1"/>
+    </svg>`;
+    world.appendChild(bridleEl);
 }
 
 function addBarnLabel(world, text, col, row) {
