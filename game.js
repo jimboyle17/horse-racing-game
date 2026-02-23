@@ -627,6 +627,7 @@ function generateHorse(qualityTier = 'medium') {
         isInjured: false,
         injuryType: null,
         recoveryRacesLeft: 0,
+        paddockTurnedOut: false,
         silkPrimary: silk.primary,
         silkSecondary: silk.secondary,
         distancePreference: DISTANCE_PREFERENCES[randomInt(0, DISTANCE_PREFERENCES.length - 1)],
@@ -709,6 +710,7 @@ function generateYearling(qualityTier = 'medium') {
         isInjured: false,
         injuryType: null,
         recoveryRacesLeft: 0,
+        paddockTurnedOut: false,
         silkPrimary: silk.primary,
         silkSecondary: silk.secondary,
         distancePreference: DISTANCE_PREFERENCES[randomInt(0, DISTANCE_PREFERENCES.length - 1)],
@@ -776,6 +778,7 @@ function applyStatLoss(horse, amount) {
 
 function processInjuryRecovery() {
     GameState.horses.forEach(horse => {
+        horse.paddockTurnedOut = false;
         if (horse.isInjured && horse.recoveryRacesLeft > 0) {
             horse.recoveryRacesLeft--;
             if (horse.recoveryRacesLeft <= 0) {
@@ -4688,6 +4691,7 @@ const OUTDOOR_BLDGS = [
     { id: 'forage',      label: 'Forage & Bedding', r: 25, c: 3,  w: 6, h: 3, css: 'forage' },
     { id: 'supplier',    label: 'Stable Supplier',  r: 25, c: 14, w: 6, h: 3, css: 'supplier' },
     { id: 'trainer-house', label: "Trainer's House", r: 3, c: 16, w: 7, h: 4, css: 'trainer-house' },
+    { id: 'vet', label: "Vet's Office", r: 3, c: 25, w: 5, h: 4, css: 'vet' },
 ];
 
 // Outdoor interactables
@@ -4710,6 +4714,10 @@ const OUTDOOR_INTERACT = [
     { id: 'sup-2',    r: 24, c: 17, prompt: 'Visit Stable Supplier',  handler: 'supplier' },
     { id: 'th-1',     r: 7,  c: 19, prompt: "Enter Trainer's House",  handler: 'trainer-house' },
     { id: 'th-2',     r: 7,  c: 20, prompt: "Enter Trainer's House",  handler: 'trainer-house' },
+    { id: 'vet-1',    r: 7,  c: 27, prompt: "Visit the Vet",         handler: 'vet' },
+    { id: 'vet-2',    r: 7,  c: 28, prompt: "Visit the Vet",         handler: 'vet' },
+    { id: 'pad-1',    r: 23, c: 7,  prompt: 'Turn Out to Paddock',   handler: 'paddock' },
+    { id: 'pad-2',    r: 23, c: 8,  prompt: 'Turn Out to Paddock',   handler: 'paddock' },
 ];
 
 const YardState = {
@@ -4773,8 +4781,8 @@ function generateOutdoorMap() {
     // Small pond
     fill(20, 25, 22, 26, T_WATER);
 
-    // North path to Trainer's House (cols 19-20, row 7)
-    map[7][19] = T_PATH; map[7][20] = T_PATH;
+    // North path to Trainer's House and Vet's Office (row 7)
+    for (let c = 19; c <= 28; c++) { map[7][c] = T_PATH; }
 
     // Buildings (solid, placed last to overwrite)
     OUTDOOR_BLDGS.forEach(b => fill(b.r, b.c, b.r + b.h - 1, b.c + b.w - 1, T_BLDG));
@@ -5196,6 +5204,8 @@ function interactYard() {
         case 'forage':       handleForageInteract(); break;
         case 'supplier':     handleSupplierInteract(); break;
         case 'trainer-house': handleTrainerHouseInteract(); break;
+        case 'vet':          handleVetInteract(); break;
+        case 'paddock':      handlePaddockInteract(); break;
     }
 }
 
@@ -5469,6 +5479,94 @@ function handleTrainerHouseInteract() {
         <div class="yard-stat-row"><span class="stat-label">Budget</span><span class="stat-value">£${formatMoney(GameState.budget)}</span></div>
         <div class="yard-stat-row"><span class="stat-label">Horses</span><span class="stat-value">${horses.length}</span></div>
     `);
+}
+
+function handleVetInteract() {
+    const injured = GameState.horses
+        .map((h, i) => ({ horse: h, idx: i }))
+        .filter(x => x.horse.isInjured && !x.horse.isYearling);
+    const cost = 5000;
+    let rows = '';
+    if (injured.length === 0) {
+        rows = '<p style="color:var(--color-success);">No injured horses — all fit and healthy!</p>';
+    } else {
+        rows = injured.map(x => {
+            const h = x.horse;
+            const canAfford = GameState.budget >= cost;
+            return `<div class="yard-stat-row" style="margin-bottom:var(--space-xs);">
+                <span class="stat-label">${h.name} — ${h.injuryType} (${h.recoveryRacesLeft} races left)</span>
+                <button class="btn btn-small" ${canAfford ? '' : 'disabled'} onclick="treatHorseAtVet(${x.idx})">Treat (£${formatMoney(cost)})</button>
+            </div>`;
+        }).join('');
+    }
+    showYardPanel(`
+        <h3>Vet's Office</h3>
+        <div class="yard-stat-row"><span class="stat-label">Budget</span><span class="stat-value">£${formatMoney(GameState.budget)}</span></div>
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        ${rows}
+    `);
+}
+
+function treatHorseAtVet(horseIdx) {
+    const cost = 5000;
+    if (GameState.budget < cost) {
+        gameAlert('Insufficient Funds', `You need £${formatMoney(cost)} for veterinary treatment.`);
+        return;
+    }
+    const horse = GameState.horses[horseIdx];
+    if (!horse || !horse.isInjured) return;
+    GameState.budget -= cost;
+    horse.recoveryRacesLeft = Math.max(0, horse.recoveryRacesLeft - 2);
+    if (horse.recoveryRacesLeft <= 0) {
+        horse.isInjured = false;
+        horse.injuryType = null;
+    }
+    updateYardHUD();
+    handleVetInteract();
+}
+
+function handlePaddockInteract() {
+    const eligible = GameState.horses
+        .map((h, i) => ({ horse: h, idx: i }))
+        .filter(x => !x.horse.isYearling);
+    let rows = '';
+    if (eligible.length === 0) {
+        rows = '<p>You have no horses to turn out.</p>';
+    } else {
+        rows = eligible.map(x => {
+            const h = x.horse;
+            const condColor = h.condition >= 70 ? 'var(--color-success)' : h.condition >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
+            const injuryInfo = h.isInjured ? ` — <span style="color:var(--color-danger);">${h.injuryType} (${h.recoveryRacesLeft} races left)</span>` : '';
+            const alreadyOut = h.paddockTurnedOut;
+            const btnLabel = alreadyOut ? 'Already turned out' : 'Turn Out';
+            return `<div class="yard-stat-row" style="margin-bottom:var(--space-xs);">
+                <span class="stat-label">${h.name} — <span style="color:${condColor};">${h.condition}%</span>${injuryInfo}</span>
+                <button class="btn btn-small" ${alreadyOut ? 'disabled' : ''} onclick="turnOutHorse(${x.idx})">${btnLabel}</button>
+            </div>`;
+        }).join('');
+    }
+    showYardPanel(`
+        <h3>Paddock Turnout</h3>
+        <p style="margin-bottom:var(--space-sm);color:var(--color-text-muted);">Let your horse stretch its legs. Free: +15-20 condition, -1 injury recovery race. Once per race day.</p>
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        ${rows}
+    `);
+}
+
+function turnOutHorse(horseIdx) {
+    const horse = GameState.horses[horseIdx];
+    if (!horse || horse.isYearling || horse.paddockTurnedOut) return;
+    horse.paddockTurnedOut = true;
+    horse.condition = Math.min(100, horse.condition + randomInt(15, 20));
+    if (horse.isInjured) {
+        horse.recoveryRacesLeft = Math.max(0, horse.recoveryRacesLeft - 1);
+        if (horse.recoveryRacesLeft <= 0) {
+            horse.isInjured = false;
+            horse.injuryType = null;
+        }
+    }
+    updateYardHUD();
+    handlePaddockInteract();
 }
 
 // --- Panel ---
