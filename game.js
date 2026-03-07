@@ -2662,28 +2662,6 @@ function openHorseDetail(horseId) {
     selectedHorseId = horseId;
 
     document.getElementById('detail-horse-name').textContent = horse.name;
-
-    // Add/remove name button for un-named horses
-    const existingNameBtn = document.getElementById('btn-name-horse');
-    if (existingNameBtn) existingNameBtn.remove();
-
-    if (horse.name === 'Un-named') {
-        const nameBtn = document.createElement('button');
-        nameBtn.id = 'btn-name-horse';
-        nameBtn.className = 'btn btn-primary';
-        nameBtn.textContent = '\u270F\uFE0F Name This Horse';
-        nameBtn.style.cssText = 'margin-left:8px;font-size:0.85rem;padding:4px 10px;vertical-align:middle;';
-        nameBtn.addEventListener('click', async () => {
-            const newName = await gamePrompt('Name Your Horse', 'Choose a name for your horse:', 'Enter name...');
-            if (newName) {
-                horse.name = newName;
-                openHorseDetail(horse.id);
-                renderStableHorses();
-            }
-        });
-        document.getElementById('detail-horse-name').insertAdjacentElement('afterend', nameBtn);
-    }
-
     const ageText = horse.isYearling ? '1 year old (Yearling)' : `${horse.age} years old`;
     document.getElementById('detail-horse-age').textContent = ageText;
 
@@ -6278,8 +6256,14 @@ function handleStallInteract2D(ia) {
     const carrotCount = GameState.forage.carrots || 0;
     const care = h.stallCare || { feedLevel: 100, waterLevel: 100, hayLevel: 100, manurePiles: 0, beddingQuality: 100 };
     const canEnterStall = !YardState.carryingTack && !YardState.leadingHorse;
+    const nameHorseBtn = h.name === 'Un-named' ? `
+        <div class="yard-buy-row" style="margin-bottom:var(--space-sm)">
+            <span style="color:var(--color-warning);font-style:italic;">Un-named</span>
+            <button class="yard-buy-btn" onclick="nameHorseFromStall(${idx})">Name Horse</button>
+        </div>` : '';
     showYardPanel(`
         <h3>${h.name}</h3>
+        ${nameHorseBtn}
         <div class="yard-horse-info">
             <span style="font-size:0.85rem;color:var(--color-text-light)">${h.age} yr${h.age > 1 ? 's' : ''}${h.isYearling ? ' (Yearling)' : ''} \u00B7 OR ${h.officialRating || '--'}</span>
         </div>
@@ -6313,6 +6297,22 @@ function handleStallInteract2D(ia) {
             <button class="yard-buy-btn" onclick="enterStall(${idx})" ${!canEnterStall ? 'disabled title="Put down items first"' : ''}>Enter Stall</button>
         </div>
     `);
+}
+
+async function nameHorseFromStall(stallIdx) {
+    const horse = GameState.horses[stallIdx];
+    if (!horse) return;
+    const newName = await gamePrompt('Name Your Horse', 'Choose a name for your horse:', 'Enter name...');
+    if (newName) {
+        horse.name = newName;
+        // Refresh the stall panel
+        const ia = YardState._currentInteractable;
+        if (ia) handleStallInteract2D(ia);
+        // Update stall name label if inside the stall
+        if (YardState.currentZone === 'stall') {
+            rebuildStallView(stallIdx);
+        }
+    }
 }
 
 function feedCarrot(stallIdx) {
@@ -7435,6 +7435,7 @@ window.leadHorseFromStall = leadHorseFromStall;
 window.bringInHorse = bringInHorse;
 window.enterStall = enterStall;
 window.exitStall = exitStall;
+window.nameHorseFromStall = nameHorseFromStall;
 
 
 // ============================================
