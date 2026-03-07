@@ -261,6 +261,42 @@ function gameConfirm(title, message) {
     ]);
 }
 
+function gamePrompt(title, message, placeholder = '') {
+    return new Promise(resolve => {
+        const overlay = document.getElementById('game-modal');
+        document.getElementById('game-modal-title').textContent = title;
+        document.getElementById('game-modal-body').innerHTML = `
+            <p>${message}</p>
+            <input type="text" id="game-prompt-input" class="game-prompt-input" placeholder="${placeholder}" maxlength="30" style="width:100%;padding:8px;margin-top:8px;font-size:1rem;border:2px solid var(--color-border);border-radius:var(--radius);background:var(--color-bg);color:var(--color-text);">
+        `;
+
+        const btnContainer = document.getElementById('game-modal-buttons');
+        btnContainer.innerHTML = '';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', () => {
+            overlay.style.display = 'none';
+            resolve(null);
+        });
+        btnContainer.appendChild(cancelBtn);
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'btn btn-primary';
+        confirmBtn.textContent = 'Confirm';
+        confirmBtn.addEventListener('click', () => {
+            const val = document.getElementById('game-prompt-input').value.trim();
+            overlay.style.display = 'none';
+            resolve(val || null);
+        });
+        btnContainer.appendChild(confirmBtn);
+
+        overlay.style.display = 'flex';
+        setTimeout(() => document.getElementById('game-prompt-input').focus(), 50);
+    });
+}
+
 // ============================================
 // PHASE 4: SOUND MANAGER
 // ============================================
@@ -638,7 +674,8 @@ function generateHorse(qualityTier = 'medium') {
         distancePreference: DISTANCE_PREFERENCES[randomInt(0, DISTANCE_PREFERENCES.length - 1)],
         groundPreference: GROUND_CONDITIONS[randomInt(0, GROUND_CONDITIONS.length - 1)],
         pendingAuction: false,
-        reservePrice: 0
+        reservePrice: 0,
+        stallCare: { feedLevel: 100, waterLevel: 100, hayLevel: 100, manurePiles: 0, beddingQuality: 100 }
     };
 
     horse.estimatedValue = calculateHorseValue(horse);
@@ -704,7 +741,7 @@ function generateYearling(qualityTier = 'medium') {
 
     const yearling = {
         id: generateId(),
-        name: generateHorseName(),
+        name: 'Un-named',
         age: 1,
         ...derivedStats,
         condition: 100,
@@ -727,7 +764,8 @@ function generateYearling(qualityTier = 'medium') {
         sire: sire,
         dam: dam,
         pendingAuction: false,
-        reservePrice: 0
+        reservePrice: 0,
+        stallCare: { feedLevel: 100, waterLevel: 100, hayLevel: 100, manurePiles: 0, beddingQuality: 100 }
     };
 
     yearling.estimatedValue = calculateYearlingValue(sire, dam);
@@ -809,7 +847,54 @@ function processInjuryRecovery() {
                 horse.injuryType = null;
             }
         }
+
+        // Stall care decline each race day
+        const care = horse.stallCare;
+        if (!care) return;
+
+        care.feedLevel = Math.max(0, care.feedLevel - 20);
+        care.waterLevel = Math.max(0, care.waterLevel - 25);
+        care.hayLevel = Math.max(0, care.hayLevel - 15);
+
+        if (care.manurePiles < 4) care.manurePiles += 1;
+        care.beddingQuality = Math.max(0, 100 - care.manurePiles * 25);
+
+        let neglectScore = 0;
+        if (care.feedLevel === 0) neglectScore += 2;
+        if (care.waterLevel === 0) neglectScore += 3;
+        if (care.hayLevel === 0) neglectScore += 1;
+        if (care.beddingQuality <= 25) neglectScore += 1;
+
+        if (neglectScore > 0) {
+            const loss = Math.min(neglectScore, 3);
+            horse.speed = Math.max(1, horse.speed - loss);
+            horse.stamina = Math.max(1, horse.stamina - loss);
+            horse.condition = Math.max(0, horse.condition - loss * 5);
+
+            if (!horse.neglectCounter) horse.neglectCounter = 0;
+            if (neglectScore >= 3) {
+                horse.neglectCounter++;
+                if (horse.neglectCounter >= 2 && !horse.isInjured) {
+                    horse.isInjured = true;
+                    horse.injuryType = 'Malnourishment';
+                    horse.recoveryRacesLeft = 3;
+                }
+                if (horse.neglectCounter >= 5) {
+                    horse.isDead = true;
+                }
+            }
+        } else {
+            horse.neglectCounter = 0;
+        }
     });
+
+    // Handle horse death from neglect
+    const deadHorses = GameState.horses.filter(h => h.isDead);
+    if (deadHorses.length > 0) {
+        const names = deadHorses.map(h => h.name).join(', ');
+        setTimeout(() => gameAlert('Horse Death', `The following horse${deadHorses.length > 1 ? 's have' : ' has'} died from neglect: ${names}`), 500);
+        GameState.horses = GameState.horses.filter(h => !h.isDead);
+    }
 }
 
 function applyAgingEffects() {
@@ -1242,6 +1327,12 @@ function loadGame() {
         // Migration: add tackedUp if missing
         GameState.horses.forEach(h => {
             if (!h.tackedUp) h.tackedUp = { saddle: false, bridle: false };
+        });
+
+        // Migration: add stallCare if missing
+        GameState.horses.forEach(h => {
+            if (!h.stallCare) h.stallCare = { feedLevel: 100, waterLevel: 100, hayLevel: 100, manurePiles: 0, beddingQuality: 100 };
+            if (h.neglectCounter === undefined) h.neglectCounter = 0;
         });
 
         openYardHub();
@@ -1794,7 +1885,7 @@ function renderYearlingCard(yearling) {
     return `
         <div class="horse-card ${isSelected ? 'selected' : ''}" data-horse-id="${yearling.id}">
             <div class="horse-card-header">
-                <span class="horse-name">${yearling.name}</span>
+                <span class="horse-name">Lot ${YearlingAuctionState.catalogue.indexOf(yearling) + 1}: ${yearling.sire.name} x ${yearling.dam.name}</span>
                 <span class="horse-age">1 yr (Yearling)</span>
             </div>
             <div class="yearling-parentage">
@@ -1907,7 +1998,7 @@ function runYearlingLot() {
     const playerMaxBid = YearlingAuctionState.playerBids[yearling.id] || 0;
 
     document.getElementById('yearling-lot-number').textContent = YearlingAuctionState.currentLotIndex + 1;
-    document.getElementById('yearling-lot-name').textContent = yearling.name;
+    document.getElementById('yearling-lot-name').textContent = `${yearling.sire.name} x ${yearling.dam.name}`;
 
     // Show parent stats in live view
     document.getElementById('yearling-lot-parents').innerHTML = `
@@ -2073,7 +2164,10 @@ function showYearlingResults() {
             <h3>Your New Yearlings</h3>
             ${YearlingAuctionState.horsesWon.map(yearling => `
                 <div class="won-horse-card">
-                    <div class="horse-name">${yearling.name}</div>
+                    <div class="yearling-naming">
+                        <label class="yearling-name-label">Name your horse:</label>
+                        <input type="text" class="yearling-name-input" data-horse-id="${yearling.id}" placeholder="Enter a name..." maxlength="30" style="width:100%;padding:6px 8px;font-size:1rem;border:2px solid var(--color-border);border-radius:var(--radius);background:var(--color-bg);color:var(--color-text);margin-bottom:6px;">
+                    </div>
                     <div class="purchase-price">Purchased for \u00A3${formatMoney(yearling.purchasePrice)}</div>
                     <div class="stable-parentage-info">Sire: ${yearling.sire.name} | Dam: ${yearling.dam.name}</div>
                 </div>
@@ -2090,6 +2184,16 @@ function showYearlingResults() {
 }
 
 function finishYearlingSale() {
+    // Apply names from the input fields
+    document.querySelectorAll('.yearling-name-input').forEach(input => {
+        const horseId = input.dataset.horseId;
+        const name = input.value.trim();
+        if (name) {
+            const yearling = YearlingAuctionState.horsesWon.find(y => y.id === horseId);
+            if (yearling) yearling.name = name;
+        }
+    });
+
     YearlingAuctionState.horsesWon.forEach(yearling => {
         yearling.silkPrimary = GameState.silkPrimary;
         yearling.silkSecondary = GameState.silkSecondary;
@@ -2558,6 +2662,28 @@ function openHorseDetail(horseId) {
     selectedHorseId = horseId;
 
     document.getElementById('detail-horse-name').textContent = horse.name;
+
+    // Add/remove name button for un-named horses
+    const existingNameBtn = document.getElementById('btn-name-horse');
+    if (existingNameBtn) existingNameBtn.remove();
+
+    if (horse.name === 'Un-named') {
+        const nameBtn = document.createElement('button');
+        nameBtn.id = 'btn-name-horse';
+        nameBtn.className = 'btn btn-primary';
+        nameBtn.textContent = '\u270F\uFE0F Name This Horse';
+        nameBtn.style.cssText = 'margin-left:8px;font-size:0.85rem;padding:4px 10px;vertical-align:middle;';
+        nameBtn.addEventListener('click', async () => {
+            const newName = await gamePrompt('Name Your Horse', 'Choose a name for your horse:', 'Enter name...');
+            if (newName) {
+                horse.name = newName;
+                openHorseDetail(horse.id);
+                renderStableHorses();
+            }
+        });
+        document.getElementById('detail-horse-name').insertAdjacentElement('afterend', nameBtn);
+    }
+
     const ageText = horse.isYearling ? '1 year old (Yearling)' : `${horse.age} years old`;
     document.getElementById('detail-horse-age').textContent = ageText;
 
@@ -4783,6 +4909,12 @@ const FEEDROOM_WALK = [false, true, true];
 const FEEDROOM_ROWS = 12;
 const FEEDROOM_COLS = 10;
 
+// Stall interior tile types
+const S_WALL = 0, S_FLOOR = 1, S_DOOR = 2, S_BEDDING = 3, S_FEEDPOT = 4, S_WATERBKT = 5, S_HAYRACK = 6, S_MANURE = 7;
+const STALL_CSS = ['wall', 'building-floor', 'door', 'stall-bedding', 'stall-feedpot', 'stall-waterbkt', 'stall-hayrack', 'stall-manure'];
+const STALL_WALK = [false, true, true, true, false, false, false, true];
+const STALL_ROWS = 8, STALL_COLS = 8;
+
 const FEED_TYPES = {
     linseed:   { label: 'Linseed',    category: 'High-Fat',     color: '#8B6914', stat: 'stamina',      bonus: [1,2], penalty: 'acceleration', penaltyRange: [0,1] },
     sugarbeet: { label: 'Sugar Beet', category: 'High-Fat',     color: '#A0522D', stat: 'stamina',      bonus: [1,2], penalty: 'acceleration', penaltyRange: [0,1] },
@@ -4856,6 +4988,14 @@ const YardState = {
     carryingBucket: null,
     carryingTack: null,
     leadingHorse: null,
+    carryingWaterBucket: false,
+    carryingHay: false,
+    carryingWheelbarrow: false,
+    stallZoneHorseIdx: null,
+    stallMap: null,
+    stallInteractables: [],
+    stallEntryR: null,
+    stallEntryC: null,
 };
 
 const FeedRoomState = {
@@ -5004,6 +5144,11 @@ function generateBarnInteractables() {
             handler: 'stall', stallIdx: rightIdx
         });
     }
+
+    // Water Hose, Hay Store, Wheelbarrow in aisle near rooms
+    list.push({ id: 'water-hose', r: roomStart + 1, c: 5, prompt: 'Water Hose', handler: 'water-hose' });
+    list.push({ id: 'hay-store', r: roomStart + 1, c: 7, prompt: 'Hay Store', handler: 'hay-store' });
+    list.push({ id: 'wheelbarrow', r: roomStart + 2, c: 5, prompt: 'Wheelbarrow', handler: 'wheelbarrow' });
 
     // Exit doors
     for (let c = 5; c <= 8; c++) {
@@ -5172,6 +5317,7 @@ function buildFeedRoomContents() {
 
 function getCurrentMap() {
     if (YardState.currentZone === 'feedroom') return FeedRoomState.map;
+    if (YardState.currentZone === 'stall') return YardState.stallMap;
     return YardState.currentZone === 'outdoor' ? YardState.outdoorMap : YardState.barnMap;
 }
 
@@ -5182,7 +5328,7 @@ function buildZoneMap() {
     const rows = map.length;
     const cols = map[0].length;
     const isOutdoor = YardState.currentZone === 'outdoor';
-    const names = isOutdoor ? TILE_CSS : YardState.currentZone === 'feedroom' ? FEEDROOM_CSS : BARN_CSS;
+    const names = isOutdoor ? TILE_CSS : YardState.currentZone === 'feedroom' ? FEEDROOM_CSS : YardState.currentZone === 'stall' ? STALL_CSS : BARN_CSS;
 
     world.style.width = (cols * TILE_SIZE) + 'px';
     world.style.height = (rows * TILE_SIZE) + 'px';
@@ -5382,6 +5528,48 @@ function buildBarnContents() {
         <div style="font-size:6px;text-align:center;color:#444;margin-top:-2px">BUCKETS</div>`;
         world.appendChild(pileEl);
     }
+
+    // Water hose decoration
+    const hoseEl = document.createElement('div');
+    hoseEl.className = 'yard-decoration';
+    hoseEl.style.left = (5.1 * TILE_SIZE) + 'px';
+    hoseEl.style.top = ((roomStart + 0.6) * TILE_SIZE) + 'px';
+    hoseEl.style.zIndex = 8;
+    hoseEl.innerHTML = `<svg viewBox="0 0 32 32" width="22" height="22">
+        <circle cx="16" cy="14" r="8" fill="none" stroke="#4a90c0" stroke-width="3"/>
+        <path d="M16,22 L16,28 L22,28" stroke="#4a90c0" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <circle cx="22" cy="28" r="2" fill="#888"/>
+        <text x="16" y="8" text-anchor="middle" font-size="4" fill="#3a7aaa" font-weight="bold">HOSE</text>
+    </svg>`;
+    world.appendChild(hoseEl);
+
+    // Hay store decoration
+    const hayEl = document.createElement('div');
+    hayEl.className = 'yard-decoration';
+    hayEl.style.left = (7.1 * TILE_SIZE) + 'px';
+    hayEl.style.top = ((roomStart + 0.6) * TILE_SIZE) + 'px';
+    hayEl.style.zIndex = 8;
+    hayEl.innerHTML = `<svg viewBox="0 0 32 32" width="22" height="22">
+        <rect x="2" y="8" width="28" height="20" rx="2" fill="#c4a840" stroke="#8a7820" stroke-width="1.5"/>
+        <line x1="2" y1="18" x2="30" y2="18" stroke="#8a7820" stroke-width="1"/>
+        <line x1="16" y1="8" x2="16" y2="28" stroke="#8a7820" stroke-width="0.8"/>
+        <text x="16" y="16" text-anchor="middle" font-size="5" fill="#5a4420" font-weight="bold">HAY</text>
+    </svg>`;
+    world.appendChild(hayEl);
+
+    // Wheelbarrow decoration
+    const wbEl = document.createElement('div');
+    wbEl.className = 'yard-decoration';
+    wbEl.style.left = (5.1 * TILE_SIZE) + 'px';
+    wbEl.style.top = ((roomStart + 1.8) * TILE_SIZE) + 'px';
+    wbEl.style.zIndex = 8;
+    wbEl.innerHTML = `<svg viewBox="0 0 36 28" width="24" height="18">
+        <path d="M6,10 L4,22 Q4,24 6,24 L26,24 Q28,24 28,22 L26,10 Z" fill="#6a6a6a" stroke="#444" stroke-width="1.5"/>
+        <circle cx="30" cy="22" r="4" fill="#555" stroke="#333" stroke-width="1"/>
+        <line x1="6" y1="10" x2="2" y2="4" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+        <line x1="26" y1="10" x2="2" y2="4" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+    </svg>`;
+    world.appendChild(wbEl);
 }
 
 function addBarnLabel(world, text, col, row) {
@@ -5429,6 +5617,7 @@ function isWalkable2D(r, c) {
     if (!map || r < 0 || r >= map.length || c < 0 || c >= map[0].length) return false;
     const t = map[r][c];
     if (YardState.currentZone === 'feedroom') return FEEDROOM_WALK[t];
+    if (YardState.currentZone === 'stall') return STALL_WALK[t];
     return YardState.currentZone === 'outdoor' ? TILE_WALK[t] : BARN_WALK[t];
 }
 
@@ -5485,7 +5674,9 @@ function checkInteractable2D() {
         ? OUTDOOR_INTERACT
         : YardState.currentZone === 'feedroom'
             ? FeedRoomState.interactables
-            : YardState.barnInteractables;
+            : YardState.currentZone === 'stall'
+                ? YardState.stallInteractables
+                : YardState.barnInteractables;
 
     // In lorry mode, only racecourse interaction points matter
     if (YardState.lorryMode) {
@@ -5586,6 +5777,14 @@ function interactYard() {
         case 'feed-bucket':   handleBucketInteract(ia); break;
         case 'exit-feedroom': handleFeedRoomDoorInteract(); break;
         case 'bucket-pile':   handleBucketPileInteract(); break;
+        case 'water-hose':    handleWaterHoseInteract(); break;
+        case 'hay-store':     handleHayStoreInteract(); break;
+        case 'wheelbarrow':   handleWheelbarrowInteract(); break;
+        case 'stall-feedpot':     handleStallFeedPotInteract(); break;
+        case 'stall-waterbucket': handleStallWaterBucketInteract(); break;
+        case 'stall-hayrack':     handleStallHayRackInteract(); break;
+        case 'stall-manure':      handleStallManureInteract(); break;
+        case 'exit-stall':        exitStall(); break;
     }
 }
 
@@ -5688,6 +5887,382 @@ function exitFeedRoom() {
     }, 200);
 }
 
+// --- Stall Interior Zone ---
+
+const STALL_MANURE_POSITIONS = [[3,3],[4,5],[2,4],[5,4]];
+
+function generateStallMap(horseIdx) {
+    const horse = GameState.horses[horseIdx];
+    const map = Array.from({length: STALL_ROWS}, () => new Array(STALL_COLS).fill(S_WALL));
+    // Fill interior with bedding
+    for (let r = 1; r < STALL_ROWS - 1; r++)
+        for (let c = 1; c < STALL_COLS - 1; c++) map[r][c] = S_BEDDING;
+    // Floor tiles near door
+    map[6][3] = S_FLOOR; map[6][4] = S_FLOOR;
+    // Door at bottom
+    map[7][3] = S_DOOR; map[7][4] = S_DOOR;
+    // Fixed furniture
+    map[2][1] = S_FEEDPOT;
+    map[5][1] = S_WATERBKT;
+    map[2][6] = S_HAYRACK;
+    // Manure piles based on horse care state
+    if (horse && horse.stallCare) {
+        const piles = Math.min(horse.stallCare.manurePiles, STALL_MANURE_POSITIONS.length);
+        for (let i = 0; i < piles; i++) {
+            const [mr, mc] = STALL_MANURE_POSITIONS[i];
+            map[mr][mc] = S_MANURE;
+        }
+    }
+    return map;
+}
+
+function generateStallInteractables(horseIdx) {
+    const horse = GameState.horses[horseIdx];
+    const list = [];
+    list.push({ r: 2, c: 1, handler: 'stall-feedpot', prompt: 'Feed Pot' });
+    list.push({ r: 5, c: 1, handler: 'stall-waterbucket', prompt: 'Water Bucket' });
+    list.push({ r: 2, c: 6, handler: 'stall-hayrack', prompt: 'Hay Rack' });
+    // Manure piles
+    if (horse && horse.stallCare) {
+        const piles = Math.min(horse.stallCare.manurePiles, STALL_MANURE_POSITIONS.length);
+        for (let i = 0; i < piles; i++) {
+            const [mr, mc] = STALL_MANURE_POSITIONS[i];
+            list.push({ r: mr, c: mc, handler: 'stall-manure', prompt: 'Manure Pile' });
+        }
+    }
+    // Exit doors
+    list.push({ r: 7, c: 3, handler: 'exit-stall', prompt: 'Exit Stall' });
+    list.push({ r: 7, c: 4, handler: 'exit-stall', prompt: 'Exit Stall' });
+    return list;
+}
+
+function enterStall(horseIdx) {
+    // Block entry if carrying barn-level items
+    if (YardState.carryingTack || YardState.leadingHorse) {
+        showYardPanel('<h3>Cannot Enter</h3><p>Put that down first before entering the stall.</p>');
+        return;
+    }
+    closeYardPanel();
+    const fade = document.getElementById('yard-zone-fade');
+    fade.classList.add('active');
+    setTimeout(() => {
+        // Save barn position for return
+        YardState.stallEntryR = YardState.playerR;
+        YardState.stallEntryC = YardState.playerC;
+        YardState.currentZone = 'stall';
+        YardState.stallZoneHorseIdx = horseIdx;
+        YardState.stallMap = generateStallMap(horseIdx);
+        YardState.stallInteractables = generateStallInteractables(horseIdx);
+        YardState.playerR = 6;
+        YardState.playerC = 3;
+        buildZoneMap();
+        buildStallContents(horseIdx);
+        requestAnimationFrame(() => {
+            updatePlayerPosition2D();
+            updateCamera2D();
+            checkInteractable2D();
+            fade.classList.remove('active');
+        });
+    }, 200);
+}
+
+function exitStall() {
+    const fade = document.getElementById('yard-zone-fade');
+    fade.classList.add('active');
+    setTimeout(() => {
+        // Drop stall-only items when leaving
+        YardState.carryingWheelbarrow = false;
+        YardState.currentZone = 'barn';
+        YardState.stallZoneHorseIdx = null;
+        YardState.stallMap = null;
+        YardState.stallInteractables = [];
+        YardState.playerR = YardState.stallEntryR || 6;
+        YardState.playerC = YardState.stallEntryC || 6;
+        YardState.barnMap = generateBarnMap();
+        YardState.barnInteractables = generateBarnInteractables();
+        buildZoneMap();
+        buildBarnContents();
+        updateCarryingIndicator();
+        requestAnimationFrame(() => {
+            updatePlayerPosition2D();
+            updateCamera2D();
+            checkInteractable2D();
+            fade.classList.remove('active');
+        });
+    }, 200);
+}
+
+function buildStallContents(horseIdx) {
+    const world = document.getElementById('yard-world');
+    const horse = GameState.horses[horseIdx];
+    if (!horse) return;
+    const care = horse.stallCare || { feedLevel: 100, waterLevel: 100, hayLevel: 100, manurePiles: 0, beddingQuality: 100 };
+    const body = horse.silkPrimary || '#6b3a1f';
+    const accent = horse.silkSecondary || '#5a2e16';
+
+    // Horse name label
+    const nameEl = document.createElement('div');
+    nameEl.className = 'yard-building-label';
+    nameEl.textContent = horse.name;
+    nameEl.style.left = (4 * TILE_SIZE) + 'px';
+    nameEl.style.top = (0.2 * TILE_SIZE) + 'px';
+    nameEl.style.transform = 'translateX(-50%)';
+    nameEl.style.zIndex = '12';
+    world.appendChild(nameEl);
+
+    // Care levels HUD
+    const hudEl = document.createElement('div');
+    hudEl.className = 'yard-decoration';
+    hudEl.style.left = (0.5 * TILE_SIZE) + 'px';
+    hudEl.style.top = (0.1 * TILE_SIZE) + 'px';
+    hudEl.style.zIndex = '15';
+    hudEl.style.pointerEvents = 'none';
+    const makeBar = (label, level) => {
+        const color = level >= 60 ? '#4a4' : level >= 30 ? '#aa4' : '#a44';
+        const filled = Math.round(level / 12.5);
+        return `<span style="font-size:6px;color:#fff;display:flex;gap:2px;align-items:center;"><span>${label}</span><span style="background:#333;padding:0 1px;">${'\u2588'.repeat(filled)}${'\u2591'.repeat(8-filled)}</span><span>${level}%</span></span>`;
+    };
+    hudEl.innerHTML = `<div style="background:rgba(0,0,0,0.6);padding:2px 4px;border-radius:3px;display:flex;flex-direction:column;gap:1px;">
+        ${makeBar('Feed', care.feedLevel)}
+        ${makeBar('Water', care.waterLevel)}
+        ${makeBar('Hay', care.hayLevel)}
+        ${makeBar('Bed', care.beddingQuality)}
+    </div>`;
+    world.appendChild(hudEl);
+
+    // Horse SVG centered in stall
+    const horseEl = document.createElement('div');
+    horseEl.className = 'yard-decoration';
+    horseEl.style.left = (3 * TILE_SIZE) + 'px';
+    horseEl.style.top = (3.2 * TILE_SIZE) + 'px';
+    horseEl.style.zIndex = 8;
+    horseEl.innerHTML = `<svg viewBox="0 0 60 40" width="48" height="32">
+        <path d="M12,22 Q9,18 9,14 Q9,10 14,10 L30,9 Q34,7 37,4 Q39,2 42,2 Q46,1.5 47,3 Q49,3.5 50,6 Q50.5,8 49,9 L44,14 Q42,17 40,21 L38,24 Q28,20 16,24 Z" fill="${body}"/>
+        <path d="M36,5 Q34,3 33,6 Q31,4 30,7" stroke="${accent}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+        <path d="M12,22 Q8,20 6,22 Q4,25 7,27" stroke="${accent}" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+        <line x1="34" y1="23" x2="35" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="30" y1="23" x2="31" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="20" y1="24" x2="19" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="16" y1="24" x2="15" y2="32" stroke="${body}" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="47" cy="4.5" r="1" fill="#222"/>
+    </svg>`;
+    world.appendChild(horseEl);
+
+    // Feed Pot SVG at (2,1)
+    const feedH = Math.round(care.feedLevel / 100 * 14);
+    const feedEl = document.createElement('div');
+    feedEl.className = 'yard-decoration';
+    feedEl.style.left = (1.1 * TILE_SIZE) + 'px';
+    feedEl.style.top = (2.1 * TILE_SIZE) + 'px';
+    feedEl.style.zIndex = 8;
+    feedEl.innerHTML = `<svg viewBox="0 0 28 22" width="24" height="18">
+        <rect x="2" y="4" width="24" height="16" rx="2" fill="#6a4a20" stroke="#4a3010" stroke-width="1"/>
+        <rect x="4" y="${20-feedH}" width="20" height="${feedH}" rx="1" fill="#c4a040" opacity="0.8"/>
+    </svg>`;
+    world.appendChild(feedEl);
+
+    // Water Bucket SVG at (5,1)
+    const waterH = Math.round(care.waterLevel / 100 * 14);
+    const waterEl = document.createElement('div');
+    waterEl.className = 'yard-decoration';
+    waterEl.style.left = (1.1 * TILE_SIZE) + 'px';
+    waterEl.style.top = (5.1 * TILE_SIZE) + 'px';
+    waterEl.style.zIndex = 8;
+    waterEl.innerHTML = `<svg viewBox="0 0 28 22" width="24" height="18">
+        <path d="M4,4 L2,20 Q2,22 4,22 L24,22 Q26,22 26,20 L24,4 Z" fill="#3a6a90" stroke="#2a4a60" stroke-width="1"/>
+        <rect x="4" y="${20-waterH}" width="20" height="${waterH}" rx="1" fill="#5ab0e0" opacity="0.7"/>
+    </svg>`;
+    world.appendChild(waterEl);
+
+    // Hay Rack SVG at (2,6)
+    const hayH = Math.round(care.hayLevel / 100 * 14);
+    const hayEl = document.createElement('div');
+    hayEl.className = 'yard-decoration';
+    hayEl.style.left = (6.1 * TILE_SIZE) + 'px';
+    hayEl.style.top = (2.1 * TILE_SIZE) + 'px';
+    hayEl.style.zIndex = 8;
+    hayEl.innerHTML = `<svg viewBox="0 0 28 22" width="24" height="18">
+        <rect x="2" y="2" width="24" height="18" rx="2" fill="#5a7a30" stroke="#3a5a10" stroke-width="1"/>
+        <rect x="4" y="${18-hayH}" width="20" height="${hayH}" rx="1" fill="#8aba50" opacity="0.8"/>
+        <line x1="2" y1="10" x2="26" y2="10" stroke="#3a5a10" stroke-width="0.5"/>
+    </svg>`;
+    world.appendChild(hayEl);
+
+    // Manure pile SVGs
+    const piles = Math.min(care.manurePiles, STALL_MANURE_POSITIONS.length);
+    for (let i = 0; i < piles; i++) {
+        const [mr, mc] = STALL_MANURE_POSITIONS[i];
+        const mEl = document.createElement('div');
+        mEl.className = 'yard-decoration';
+        mEl.style.left = ((mc + 0.2) * TILE_SIZE) + 'px';
+        mEl.style.top = ((mr + 0.2) * TILE_SIZE) + 'px';
+        mEl.style.zIndex = 8;
+        mEl.innerHTML = `<svg viewBox="0 0 24 18" width="20" height="14">
+            <ellipse cx="12" cy="14" rx="10" ry="4" fill="#5a4a20"/>
+            <ellipse cx="12" cy="10" rx="7" ry="4" fill="#6a5a30"/>
+            <ellipse cx="12" cy="7" rx="4" ry="3" fill="#7a6a40"/>
+        </svg>`;
+        world.appendChild(mEl);
+    }
+
+    // Exit label
+    addBarnLabel(world, 'EXIT', 3.5, 7.3);
+}
+
+// --- Barn Aisle Item Handlers ---
+
+function isCarryingAnything() {
+    return YardState.carryingBucket || YardState.carryingTack || YardState.leadingHorse || YardState.carryingWaterBucket || YardState.carryingHay || YardState.carryingWheelbarrow;
+}
+
+function handleWaterHoseInteract() {
+    if (isCarryingAnything()) {
+        showYardPanel('<h3>Hands Full</h3><p>Put that down first!</p>');
+        return;
+    }
+    YardState.carryingWaterBucket = true;
+    closeYardPanel();
+    updateCarryingIndicator();
+    showYardPanel('<h3>Water Hose</h3><p>Filled a water bucket from the hose. Take it to a horse\'s stall.</p>');
+}
+
+function handleHayStoreInteract() {
+    if (isCarryingAnything()) {
+        showYardPanel('<h3>Hands Full</h3><p>Put that down first!</p>');
+        return;
+    }
+    YardState.carryingHay = true;
+    closeYardPanel();
+    updateCarryingIndicator();
+    showYardPanel('<h3>Hay Store</h3><p>Picked up some hay. Take it to a horse\'s stall.</p>');
+}
+
+function handleWheelbarrowInteract() {
+    if (YardState.carryingWheelbarrow) {
+        YardState.carryingWheelbarrow = false;
+        updateCarryingIndicator();
+        showYardPanel('<h3>Wheelbarrow</h3><p>Put the wheelbarrow back.</p>');
+        return;
+    }
+    if (isCarryingAnything()) {
+        showYardPanel('<h3>Hands Full</h3><p>Put that down first!</p>');
+        return;
+    }
+    YardState.carryingWheelbarrow = true;
+    closeYardPanel();
+    updateCarryingIndicator();
+    showYardPanel('<h3>Wheelbarrow</h3><p>Picked up the wheelbarrow. Use it to muck out stalls.</p>');
+}
+
+// --- Stall Interior Interaction Handlers ---
+
+function stallCareColorStyle(level) {
+    if (level >= 60) return 'color:var(--color-success)';
+    if (level >= 30) return 'color:var(--color-warning)';
+    return 'color:var(--color-danger)';
+}
+
+function stallCareBar(level) {
+    const filled = Math.round(level / 12.5);
+    const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(8 - filled);
+    return `<span style="${stallCareColorStyle(level)}">${bar} ${level}%</span>`;
+}
+
+function handleStallFeedPotInteract() {
+    const idx = YardState.stallZoneHorseIdx;
+    const horse = GameState.horses[idx];
+    if (!horse) return;
+    const care = horse.stallCare;
+
+    if (YardState.carryingBucket) {
+        const bucket = YardState.carryingBucket;
+        if (bucket.horseIdx !== idx) {
+            showYardPanel(`<h3>Feed Pot</h3><p>This bucket is for <strong>${bucket.horseName}</strong>, not ${horse.name}.</p>`);
+            return;
+        }
+        bucket.feeds.forEach(feedTypeKey => applyFeedEffect(horse, feedTypeKey));
+        care.feedLevel = Math.min(100, care.feedLevel + 30 * bucket.feeds.length);
+        horse.fedThisRound = true;
+        YardState.carryingBucket = null;
+        updateCarryingIndicator();
+        rebuildStallView(idx);
+        const feedNames = bucket.feeds.map(f => FEED_TYPES[f].label).join(', ');
+        showYardPanel(`<h3>Fed ${horse.name}!</h3><p>Fed <strong>${feedNames}</strong></p><p>Feed level: <strong>${care.feedLevel}%</strong></p>`);
+        return;
+    }
+    showYardPanel(`<h3>Feed Pot</h3><p>${horse.name}'s feed trough.</p>
+        <div class="yard-stat-row"><span class="stat-label">Feed Level</span>${stallCareBar(care.feedLevel)}</div>
+        <p style="margin-top:var(--space-xs);color:var(--color-text-muted);font-size:0.8rem">Bring a filled feed bucket from the Feed Room to top up.</p>`);
+}
+
+function handleStallWaterBucketInteract() {
+    const idx = YardState.stallZoneHorseIdx;
+    const horse = GameState.horses[idx];
+    if (!horse) return;
+    const care = horse.stallCare;
+
+    if (YardState.carryingWaterBucket) {
+        care.waterLevel = 100;
+        YardState.carryingWaterBucket = false;
+        updateCarryingIndicator();
+        rebuildStallView(idx);
+        showYardPanel(`<h3>Water Filled!</h3><p>Filled ${horse.name}'s water bucket.</p><p>Water level: <strong>100%</strong></p>`);
+        return;
+    }
+    showYardPanel(`<h3>Water Bucket</h3><p>${horse.name}'s water supply.</p>
+        <div class="yard-stat-row"><span class="stat-label">Water Level</span>${stallCareBar(care.waterLevel)}</div>
+        <p style="margin-top:var(--space-xs);color:var(--color-text-muted);font-size:0.8rem">Fill a water bucket from the hose in the barn aisle.</p>`);
+}
+
+function handleStallHayRackInteract() {
+    const idx = YardState.stallZoneHorseIdx;
+    const horse = GameState.horses[idx];
+    if (!horse) return;
+    const care = horse.stallCare;
+
+    if (YardState.carryingHay) {
+        care.hayLevel = 100;
+        YardState.carryingHay = false;
+        updateCarryingIndicator();
+        rebuildStallView(idx);
+        showYardPanel(`<h3>Hay Topped Up!</h3><p>Topped up ${horse.name}'s hay rack.</p><p>Hay level: <strong>100%</strong></p>`);
+        return;
+    }
+    showYardPanel(`<h3>Hay Rack</h3><p>${horse.name}'s hay supply.</p>
+        <div class="yard-stat-row"><span class="stat-label">Hay Level</span>${stallCareBar(care.hayLevel)}</div>
+        <p style="margin-top:var(--space-xs);color:var(--color-text-muted);font-size:0.8rem">Pick up hay from the hay store in the barn aisle.</p>`);
+}
+
+function handleStallManureInteract() {
+    const idx = YardState.stallZoneHorseIdx;
+    const horse = GameState.horses[idx];
+    if (!horse) return;
+    const care = horse.stallCare;
+
+    if (YardState.carryingWheelbarrow) {
+        care.manurePiles = Math.max(0, care.manurePiles - 1);
+        care.beddingQuality = Math.max(0, 100 - care.manurePiles * 25);
+        // Rebuild the map and interactables
+        YardState.stallMap = generateStallMap(idx);
+        YardState.stallInteractables = generateStallInteractables(idx);
+        rebuildStallView(idx);
+        const remaining = care.manurePiles;
+        showYardPanel(`<h3>Mucked Out!</h3><p>Cleaned up a manure pile.</p><p>${remaining > 0 ? remaining + ' pile' + (remaining > 1 ? 's' : '') + ' remaining.' : 'Stall is clean! Bedding quality restored.'}</p>`);
+        return;
+    }
+    showYardPanel('<h3>Manure Pile</h3><p>Need a wheelbarrow to clean this up. Pick one up from the barn aisle.</p>');
+}
+
+function rebuildStallView(horseIdx) {
+    buildZoneMap();
+    buildStallContents(horseIdx);
+    requestAnimationFrame(() => {
+        updatePlayerPosition2D();
+        updateCamera2D();
+        checkInteractable2D();
+    });
+}
+
 // --- Interaction Handlers ---
 
 function handleStallInteract2D(ia) {
@@ -5701,6 +6276,8 @@ function handleStallInteract2D(ia) {
     const condClass = h.condition >= 70 ? 'color:var(--color-success)' : h.condition >= 40 ? 'color:var(--color-warning)' : 'color:var(--color-danger)';
     const trainingText = h.trainingFocus ? capitalizeFirst(h.trainingFocus) : 'None';
     const carrotCount = GameState.forage.carrots || 0;
+    const care = h.stallCare || { feedLevel: 100, waterLevel: 100, hayLevel: 100, manurePiles: 0, beddingQuality: 100 };
+    const canEnterStall = !YardState.carryingTack && !YardState.leadingHorse;
     showYardPanel(`
         <h3>${h.name}</h3>
         <div class="yard-horse-info">
@@ -5717,6 +6294,12 @@ function handleStallInteract2D(ia) {
         <div class="yard-stat-row"><span class="stat-label">Tack</span><span class="stat-value">Saddle: <span style="color:${h.tackedUp?.saddle ? 'var(--color-success)' : 'var(--color-warning)'}">${h.tackedUp?.saddle ? 'Y' : 'N'}</span> | Bridle: <span style="color:${h.tackedUp?.bridle ? 'var(--color-success)' : 'var(--color-warning)'}">${h.tackedUp?.bridle ? 'Y' : 'N'}</span></span></div>
         ${h.isInjured ? `<p style="color:var(--color-danger);margin-top:var(--space-sm);">Injured: ${h.injuryType} (${h.recoveryRacesLeft} races left)</p>` : ''}
         <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
+        <div style="margin-bottom:var(--space-xs);font-weight:600;font-size:0.85rem;">Stall Care:</div>
+        <div class="yard-stat-row"><span class="stat-label">Feed</span>${stallCareBar(care.feedLevel)}</div>
+        <div class="yard-stat-row"><span class="stat-label">Water</span>${stallCareBar(care.waterLevel)}</div>
+        <div class="yard-stat-row"><span class="stat-label">Hay</span>${stallCareBar(care.hayLevel)}</div>
+        <div class="yard-stat-row"><span class="stat-label">Bedding</span>${stallCareBar(care.beddingQuality)}${care.manurePiles > 0 ? ` <span style="color:var(--color-text-muted);font-size:0.75rem">(${care.manurePiles} manure)</span>` : ''}</div>
+        <hr style="margin:var(--space-sm) 0;border-color:var(--color-bg-dark);">
         <div class="yard-buy-row">
             <span>Carrots: ${carrotCount}</span>
             <button class="yard-buy-btn" onclick="feedCarrot(${idx})" ${carrotCount <= 0 ? 'disabled' : ''}>Feed Carrot</button>
@@ -5725,6 +6308,10 @@ function handleStallInteract2D(ia) {
             <span>Paddock</span>
             <button class="yard-buy-btn" onclick="leadHorseFromStall(${idx})">Lead to Paddock</button>
         </div>` : ''}
+        <div class="yard-buy-row" style="margin-top:var(--space-xs)">
+            <span>Stall Interior</span>
+            <button class="yard-buy-btn" onclick="enterStall(${idx})" ${!canEnterStall ? 'disabled title="Put down items first"' : ''}>Enter Stall</button>
+        </div>
     `);
 }
 
@@ -5796,8 +6383,8 @@ function handleScoopRackInteract() {
 }
 
 function pickUpTack(type) {
-    if (YardState.carryingBucket) {
-        showYardPanel('<h3>Hands Full</h3><p>Put down the feed bucket first!</p>');
+    if (YardState.carryingBucket || YardState.carryingWaterBucket || YardState.carryingHay || YardState.carryingWheelbarrow) {
+        showYardPanel('<h3>Hands Full</h3><p>Put that down first!</p>');
         return;
     }
     if (YardState.leadingHorse) {
@@ -6006,7 +6593,7 @@ function removeFeedRoomHUD() {
 
 function updateCarryingIndicator() {
     let ind = document.querySelector('.carrying-indicator');
-    const hasCarrying = YardState.carryingBucket || YardState.carryingTack || YardState.leadingHorse;
+    const hasCarrying = YardState.carryingBucket || YardState.carryingTack || YardState.leadingHorse || YardState.carryingWaterBucket || YardState.carryingHay || YardState.carryingWheelbarrow;
     if (!hasCarrying) {
         if (ind) ind.remove();
         return;
@@ -6027,6 +6614,12 @@ function updateCarryingIndicator() {
     } else if (YardState.leadingHorse) {
         const suffix = YardState.leadingHorse.returning ? ' (returning)' : '';
         ind.textContent = `Leading: ${YardState.leadingHorse.horseName}${suffix}`;
+    } else if (YardState.carryingWaterBucket) {
+        ind.textContent = 'Carrying: Water Bucket';
+    } else if (YardState.carryingHay) {
+        ind.textContent = 'Carrying: Hay';
+    } else if (YardState.carryingWheelbarrow) {
+        ind.textContent = 'Carrying: Wheelbarrow';
     }
 }
 
@@ -6055,8 +6648,8 @@ function handleBucketPileInteract() {
 
 function pickUpBucket(idx) {
     if (idx < 0 || idx >= YardState.bucketPile.length) return;
-    if (YardState.carryingTack) {
-        showYardPanel('<h3>Hands Full</h3><p>Put down the tack first!</p>');
+    if (YardState.carryingTack || YardState.carryingWaterBucket || YardState.carryingHay || YardState.carryingWheelbarrow) {
+        showYardPanel('<h3>Hands Full</h3><p>Put that down first!</p>');
         return;
     }
     if (YardState.leadingHorse) {
@@ -6384,12 +6977,8 @@ function handlePaddockInteract() {
 }
 
 function leadHorseFromStall(stallIdx) {
-    if (YardState.carryingTack) {
-        showYardPanel('<h3>Hands Full</h3><p>Put down the tack first!</p>');
-        return;
-    }
-    if (YardState.carryingBucket) {
-        showYardPanel('<h3>Hands Full</h3><p>Put down the bucket first!</p>');
+    if (YardState.carryingTack || YardState.carryingBucket || YardState.carryingWaterBucket || YardState.carryingHay || YardState.carryingWheelbarrow) {
+        showYardPanel('<h3>Hands Full</h3><p>Put that down first!</p>');
         return;
     }
     const horses = GameState.horses;
@@ -6757,6 +7346,12 @@ function openYardHub() {
     YardState.carryingBucket = null;
     YardState.carryingTack = null;
     YardState.leadingHorse = null;
+    YardState.carryingWaterBucket = false;
+    YardState.carryingHay = false;
+    YardState.carryingWheelbarrow = false;
+    YardState.stallZoneHorseIdx = null;
+    YardState.stallMap = null;
+    YardState.stallInteractables = [];
 
     YardState.outdoorMap = generateOutdoorMap();
     YardState.barnMap = generateBarnMap();
@@ -6838,6 +7433,8 @@ window.pickUpTack = pickUpTack;
 window.putBackTack = putBackTack;
 window.leadHorseFromStall = leadHorseFromStall;
 window.bringInHorse = bringInHorse;
+window.enterStall = enterStall;
+window.exitStall = exitStall;
 
 
 // ============================================

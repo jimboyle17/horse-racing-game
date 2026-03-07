@@ -1045,6 +1045,13 @@ body {
     margin-bottom: var(--space-sm);
 }
 
+.yearling-name-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: var(--space-xs);
+    color: var(--color-primary);
+}
+
 .won-horse-card .purchase-price {
     color: var(--color-text-light);
     font-size: 0.95rem;
@@ -4266,6 +4273,33 @@ body {
     gap: 12px;
     white-space: nowrap;
     pointer-events: none;
+}
+
+.yard-tile.stall-bedding {
+    background:
+        repeating-linear-gradient(30deg, rgba(210,190,120,0.2) 0px, rgba(210,190,120,0.2) 2px, transparent 2px, transparent 5px),
+        linear-gradient(135deg, #d4c490 0%, #c4b480 50%, #d4c490 100%);
+}
+
+.yard-tile.stall-feedpot {
+    background: linear-gradient(135deg, #7a5a30 0%, #6a4a20 50%, #7a5a30 100%);
+    border: 1px solid #4a3010;
+}
+
+.yard-tile.stall-waterbkt {
+    background: linear-gradient(135deg, #5a8ab0 0%, #4a7aa0 50%, #5a8ab0 100%);
+    border: 1px solid #3a5a70;
+}
+
+.yard-tile.stall-hayrack {
+    background: linear-gradient(135deg, #6a9a50 0%, #5a8a40 50%, #6a9a50 100%);
+    border: 1px solid #3a6a20;
+}
+
+.yard-tile.stall-manure {
+    background:
+        radial-gradient(circle at 40% 50%, rgba(80,60,20,0.5) 0%, transparent 60%),
+        linear-gradient(135deg, #8a7a50 0%, #7a6a40 50%, #8a7a50 100%);
 }
 
 .carrying-indicator {
