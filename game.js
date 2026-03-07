@@ -5700,6 +5700,8 @@ function checkInteractable2D() {
 
 function onYardKeyDown(e) {
     if (!YardState.active) return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     switch (e.key) {
         case 'w': case 'W': case 'ArrowUp':    e.preventDefault(); movePlayer2D(-1, 0); break;
         case 's': case 'S': case 'ArrowDown':   e.preventDefault(); movePlayer2D(1, 0); break;
