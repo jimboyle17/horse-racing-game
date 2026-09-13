@@ -414,6 +414,46 @@ body {
     opacity: 0.9;
 }
 
+/* XP Display */
+.xp-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 4px;
+}
+
+.xp-level-badge {
+    background: var(--color-secondary);
+    color: var(--color-primary-dark);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.xp-bar-container {
+    width: 60px;
+    height: 6px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.xp-bar-fill {
+    height: 100%;
+    background: var(--color-secondary);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+    width: 0%;
+}
+
+.xp-amount {
+    font-size: 0.65rem;
+    opacity: 0.8;
+    white-space: nowrap;
+}
+
 .dashboard-content {
     padding: var(--space-lg);
     flex: 1;
@@ -2244,13 +2284,27 @@ body {
 }
 
 /* Decision Moment */
-.decision-moment {
-    background: linear-gradient(135deg, var(--color-primary-dark), var(--color-primary));
-    border-radius: var(--radius-md);
-    padding: var(--space-md);
+/* Whip Control */
+.whip-control {
     text-align: center;
-    animation: pulse 0.5s ease;
+    padding: var(--space-sm) 0;
     flex-shrink: 0;
+}
+
+.whip-btn {
+    background: linear-gradient(135deg, var(--color-primary-dark), var(--color-primary));
+    color: white;
+    border: 2px solid var(--color-secondary);
+    padding: var(--space-sm) var(--space-xl);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    animation: pulse 0.5s ease;
 }
 
 @keyframes pulse {
@@ -2258,50 +2312,504 @@ body {
     50% { transform: scale(1.02); }
 }
 
-.decision-prompt {
-    color: white;
-    font-size: 1rem;
-    margin-bottom: var(--space-md);
+.whip-btn:hover {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    transform: scale(1.05);
+}
+
+.whip-btn:active {
+    transform: scale(0.95);
+}
+
+.whip-btn.whip-warning {
+    border-color: #e6a817;
+    box-shadow: 0 0 8px rgba(230, 168, 23, 0.4);
+}
+
+.whip-btn.whip-danger {
+    border-color: #cc0000;
+    box-shadow: 0 0 8px rgba(204, 0, 0, 0.4);
+    animation: whip-danger-pulse 0.5s ease infinite;
+}
+
+@keyframes whip-danger-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(204, 0, 0, 0.4); }
+    50% { box-shadow: 0 0 16px rgba(204, 0, 0, 0.7); }
+}
+
+.whip-btn #whip-count {
+    background: rgba(255,255,255,0.2);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+
+.dq-warning {
+    color: #cc0000;
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-top: var(--space-xs);
+}
+
+.dq-warning.dq-active {
+    color: #ff0000;
+    animation: dq-flash 0.4s ease infinite;
+}
+
+@keyframes dq-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Tactical Suitability on Strategy Buttons */
+.strategy-suit {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 4px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+}
+
+.strategy-suit.suit-high {
+    color: #2e7d32;
+    background: rgba(46, 125, 50, 0.1);
+}
+
+.strategy-suit.suit-med {
+    color: #e6a817;
+    background: rgba(230, 168, 23, 0.1);
+}
+
+.strategy-suit.suit-low {
+    color: #c62828;
+    background: rgba(198, 40, 40, 0.1);
+}
+
+/* Tactical Suitability Bars (Horse Detail) */
+.tactic-suit-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: 6px;
+}
+
+.tactic-suit-label {
+    width: 110px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.tactic-suit-bar-bg {
+    flex: 1;
+    height: 10px;
+    background: var(--color-bg-light, #e8e8e8);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.tactic-suit-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.3s ease;
+}
+
+.tactic-suit-bar-fill.suit-high { background: #2e7d32; }
+.tactic-suit-bar-fill.suit-med { background: #e6a817; }
+.tactic-suit-bar-fill.suit-low { background: #c62828; }
+
+.tactic-suit-val {
+    width: 38px;
+    text-align: right;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.tactic-suit-val.suit-high { color: #2e7d32; }
+.tactic-suit-val.suit-med { color: #e6a817; }
+.tactic-suit-val.suit-low { color: #c62828; }
+
+/* Weather Overlay */
+.weather-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 45;
+}
+
+.weather-overlay.weather-rain {
+    background: linear-gradient(180deg, rgba(100,120,140,0.15) 0%, rgba(80,100,120,0.1) 100%);
+}
+
+.weather-overlay.weather-rain::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background:
+        repeating-linear-gradient(
+            100deg,
+            transparent 0px,
+            transparent 14px,
+            rgba(140,170,200,0.15) 14px,
+            rgba(140,170,200,0.15) 15px
+        );
+    animation: rainFall 0.4s linear infinite;
+}
+
+@keyframes rainFall {
+    0% { background-position: 0 0; }
+    100% { background-position: -5px 32px; }
+}
+
+.weather-overlay.weather-sun {
+    background: radial-gradient(ellipse at 80% 10%, rgba(255,220,100,0.12) 0%, transparent 60%);
+}
+
+.weather-overlay.weather-sun::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: linear-gradient(180deg, rgba(255,240,180,0.05) 0%, transparent 40%);
+}
+
+/* Door peek-through effect */
+.yard-tile.door::after {
+    content: '';
+    position: absolute;
+    top: 25%; left: 25%;
+    width: 50%; height: 50%;
+    background: radial-gradient(ellipse, rgba(30,20,10,0.5) 0%, transparent 80%);
+    pointer-events: none;
+}
+
+/* Yard Pets & Pests */
+.yard-pet {
+    cursor: default;
+    filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.3));
+}
+
+.yard-pest {
+    cursor: default;
+    animation: pest-idle 2s ease-in-out infinite;
+}
+
+@keyframes pest-idle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+/* Race Calendar Inline Horses */
+.race-inline-horses {
+    border-top: 1px solid rgba(0,0,0,0.1);
+    margin-top: var(--space-sm);
+    padding-top: var(--space-xs);
+}
+
+.race-inline-horse {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.race-inline-horse.disabled {
+    opacity: 0.5;
+}
+
+.inline-horse-name {
+    font-weight: 600;
+    min-width: 80px;
+}
+
+.inline-horse-or {
+    color: var(--color-text-light);
+    font-size: 0.75rem;
+}
+
+.inline-horse-cond {
+    font-weight: 600;
+    font-size: 0.75rem;
+}
+
+.entry-warn-badge {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 3px;
     font-weight: 600;
 }
 
-.decision-options {
-    display: flex;
-    gap: var(--space-sm);
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: var(--space-md);
+.entry-warn-badge.warn-tack {
+    background: rgba(220,50,50,0.1);
+    color: #c62828;
 }
 
-.decision-btn {
-    background: var(--color-secondary);
-    color: var(--color-primary-dark);
-    border: none;
-    padding: var(--space-sm) var(--space-lg);
-    border-radius: var(--radius-md);
-    font-size: 0.9rem;
-    font-weight: 700;
+.entry-warn-badge.warn-cond {
+    background: rgba(230,168,23,0.1);
+    color: #e6a817;
+}
+
+.entry-warn-badge.warn-dist,
+.entry-warn-badge.warn-ground {
+    background: rgba(230,168,23,0.1);
+    color: #b8860b;
+}
+
+.entry-warn-badge.warn-entered {
+    background: rgba(100,100,100,0.1);
+    color: #666;
+}
+
+.quick-enter-btn {
+    margin-left: auto;
+    padding: 2px 8px;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-primary);
+    font-size: 0.7rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all var(--transition-fast);
 }
 
-.decision-btn:hover {
-    background: var(--color-secondary-light);
-    transform: scale(1.05);
+.quick-enter-btn:hover:not(:disabled) {
+    background: var(--color-primary);
+    color: white;
 }
 
-.decision-timer {
+.quick-enter-btn.entered {
+    background: var(--color-primary);
+    color: white;
+}
+
+.quick-enter-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.batch-entry-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-sm) var(--space-md);
+    background: linear-gradient(135deg, var(--color-primary-dark), var(--color-primary));
+    color: white;
+    border-radius: var(--radius-md);
+    margin: var(--space-md) 0;
+    font-weight: 600;
+    box-shadow: var(--shadow-md);
+}
+
+.batch-entry-bar .btn {
+    background: var(--color-secondary);
+    color: var(--color-primary-dark);
+}
+
+/* Betting System */
+.betting-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    overflow-y: auto;
+    padding: var(--space-lg);
+}
+
+.betting-panel {
+    max-width: 700px;
+    margin: 0 auto;
+    background: var(--color-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.betting-panel h3 {
+    font-family: var(--font-display);
+    color: var(--color-primary);
+    margin-bottom: var(--space-sm);
+}
+
+.betting-budget {
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: var(--space-md);
+}
+
+.betting-race-card {
+    background: var(--color-bg-light, #f5f5f5);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.betting-race-card h4 {
+    margin-bottom: var(--space-sm);
+    font-size: 0.95rem;
+}
+
+.odds-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.odds-table th {
+    text-align: left;
+    padding: 4px 6px;
+    border-bottom: 2px solid var(--color-border);
+    font-size: 0.75rem;
+    color: var(--color-text-light);
+}
+
+.odds-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+}
+
+.bet-type-select {
+    padding: 2px 4px;
+    font-size: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+}
+
+.bet-stake-input {
+    width: 70px;
+    padding: 2px 4px;
+    font-size: 0.8rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+}
+
+.betting-actions {
+    margin-top: var(--space-md);
+    text-align: center;
+}
+
+/* Racecourse Interior Tiles */
+.yard-tile.rc-floor {
+    background: linear-gradient(135deg, #c4b496 0%, #b8a88a 50%, #c4b496 100%);
+}
+
+.yard-tile.rc-wall {
+    background: linear-gradient(180deg, #8a7a6a 0%, #6a5a4a 100%);
+    border: 1px solid #4a3a2a;
+}
+
+.yard-tile.rc-track {
+    background:
+        repeating-linear-gradient(80deg, transparent, transparent 4px, rgba(80,120,40,0.15) 4px, rgba(80,120,40,0.15) 5px),
+        linear-gradient(135deg, #5a9a42 0%, #4a8a32 50%, #5a9a42 100%);
+}
+
+.yard-tile.rc-rail {
+    background: #d4d4d4;
+    border: 1px solid #aaa;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.parade-ring-horse {
+    pointer-events: none;
+}
+
+/* Jump Racing */
+.jump-indicator {
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: 800;
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    animation: jumpPulse 0.4s ease infinite;
+}
+
+.jump-indicator.approaching {
+    background: linear-gradient(135deg, #e6a817, #d4960f);
+    color: white;
+}
+
+.jump-indicator.jumped {
+    background: linear-gradient(135deg, #2e7d32, #1b5e20);
+    color: white;
+    animation: none;
+}
+
+@keyframes jumpPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+}
+
+.race-type-badge.jump {
+    background: #6b4226;
+    color: white;
+}
+
+/* Live Bidding */
+.live-bid-buttons {
+    display: flex;
+    gap: var(--space-sm);
+    justify-content: center;
+    margin: var(--space-sm) 0;
+}
+
+.bid-btn-live {
+    font-size: 1rem;
+    padding: var(--space-sm) var(--space-xl);
+    font-weight: 700;
+}
+
+.bid-timer {
     height: 4px;
-    background: rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.1);
     border-radius: 2px;
     overflow: hidden;
+    margin-top: var(--space-xs);
 }
 
-.timer-bar {
+.bid-timer-bar {
     height: 100%;
     background: var(--color-secondary);
     width: 100%;
-    transition: width 0.1s linear;
+    transition: width 0.2s linear;
+    border-radius: 2px;
+}
+
+.interest-btn, .skip-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: all var(--transition-fast);
+}
+
+.interest-btn.interested {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+.skip-btn.skipped {
+    background: var(--color-danger, #c62828);
+    color: white;
+    border-color: var(--color-danger, #c62828);
+}
+
+.bid-interest-group {
+    display: flex;
+    gap: var(--space-xs);
+    justify-content: center;
+    margin-top: var(--space-sm);
 }
 
 /* Race Results */
@@ -2543,6 +3051,135 @@ body {
 }
 
 /* ===== Phase 2: Silk Colours ===== */
+/* Game Settings */
+.settings-section {
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--color-border);
+}
+
+.settings-title {
+    font-family: var(--font-display);
+    color: var(--color-primary);
+    margin-bottom: var(--space-sm);
+    font-size: 1.1rem;
+}
+
+.setting-options {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.setting-btn {
+    flex: 1;
+    padding: var(--space-xs) var(--space-sm);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all var(--transition-fast);
+    color: var(--color-text);
+}
+
+.setting-btn:hover {
+    border-color: var(--color-primary-light);
+}
+
+.setting-btn.selected {
+    border-color: var(--color-primary);
+    background: rgba(26, 95, 60, 0.08);
+    color: var(--color-primary);
+}
+
+.setting-hint {
+    font-size: 0.75rem;
+    color: var(--color-text-light);
+    margin-top: 2px;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.toggle-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-primary);
+}
+
+/* Training Centre Picker */
+.training-centre-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    padding: var(--space-sm) 0;
+}
+
+.centre-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    background: var(--color-bg);
+    flex: 1 1 160px;
+    min-width: 140px;
+}
+
+.centre-card:hover {
+    border-color: var(--color-primary-light);
+    box-shadow: var(--shadow-sm);
+}
+
+.centre-card.selected {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-light);
+    background: rgba(26, 95, 60, 0.04);
+}
+
+.centre-card-swatch {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.centre-card-accent {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 12px;
+}
+
+.centre-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.centre-card-name {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--color-text);
+}
+
+.centre-card-desc {
+    font-size: 0.7rem;
+    color: var(--color-text-light);
+    line-height: 1.3;
+}
+
 .silk-colour-picker {
     display: flex;
     flex-wrap: wrap;
@@ -2967,12 +3604,256 @@ body {
     margin-bottom: var(--space-sm);
 }
 
+.setback-card.eased {
+    background: rgba(255, 193, 7, 0.05);
+    border-left-color: var(--color-secondary);
+}
+
+.setback-card.averted {
+    background: rgba(40, 167, 69, 0.08);
+    border-left-color: var(--color-success);
+}
+
 .injury-card {
     background: rgba(220, 53, 69, 0.08);
     border-left: 3px solid var(--color-danger);
     border-radius: var(--radius-md);
     padding: var(--space-md);
     margin-bottom: var(--space-sm);
+}
+
+/* ============================================
+   STAFF PERCEPTION REPORTS
+   ============================================ */
+
+.staff-report-section {
+    border-left: 4px solid var(--color-primary);
+    background: rgba(45, 90, 61, 0.05);
+}
+
+.staff-report-card {
+    background: var(--color-bg);
+    border-left: 3px solid var(--color-text-muted);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+
+.staff-report-card.precise {
+    border-left-color: var(--color-primary);
+}
+
+.staff-report-card.vague {
+    border-left-color: var(--color-secondary);
+}
+
+.staff-report-who {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+}
+
+.staff-report-who small {
+    font-weight: 400;
+    color: var(--color-text-muted);
+}
+
+.staff-report-lead {
+    margin-left: auto;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    background: rgba(45, 90, 61, 0.1);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+.staff-report-text {
+    font-style: italic;
+    color: var(--color-text-light);
+    font-size: 0.95rem;
+}
+
+.staff-report-hint {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-top: var(--space-sm);
+}
+
+.quick-training-row.flagged {
+    background: rgba(255, 193, 7, 0.08);
+    border-radius: var(--radius-sm);
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+}
+
+.brewing-flag {
+    color: var(--color-warning);
+    font-size: 0.9rem;
+    cursor: help;
+}
+
+/* ============================================
+   STUD FARM / BLOODSTOCK
+   ============================================ */
+
+.stud-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: var(--space-sm) 0;
+}
+
+.stud-tab {
+    flex: 1 1 auto;
+    padding: 6px 8px;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid var(--color-bg-dark);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    color: var(--color-text-light);
+    cursor: pointer;
+}
+
+.stud-tab.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+}
+
+.stud-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-bg-dark);
+    border-left: 3px solid var(--color-primary);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.stud-card.stallion { border-left-color: var(--color-secondary); }
+.stud-card.foal     { border-left-color: var(--color-success); }
+.stud-card.sale     { border-left-color: var(--color-warning); }
+
+/* ============================================
+   REPUTATION
+   ============================================ */
+
+.rep-unknown     { color: var(--color-text-muted); }
+.rep-known       { color: var(--color-text-light); }
+.rep-established { color: var(--color-primary); }
+.rep-respected   { color: var(--color-secondary); font-weight: 600; }
+.rep-renowned    { color: var(--color-secondary); font-weight: 700; }
+
+.rep-bar {
+    height: 8px;
+    background: var(--color-bg-dark);
+    border-radius: 999px;
+    overflow: hidden;
+    margin: var(--space-xs) 0;
+}
+
+.rep-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+
+#yard-hud-reputation { white-space: nowrap; }
+
+.stud-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.stud-card-name { font-weight: 600; }
+
+.stud-card-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.stud-card-line { font-size: 0.8rem; margin-top: 2px; }
+
+.stud-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    font-size: 0.78rem;
+    color: var(--color-text-light);
+    margin: 4px 0;
+}
+
+.stud-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+.stud-badge.hot   { background: rgba(201,162,39,0.18); color: #8a6d10; }
+.stud-badge.first { background: rgba(45,90,61,0.14);  color: var(--color-primary); }
+.stud-badge.cold  { background: rgba(0,0,0,0.06);     color: var(--color-text-muted); }
+
+.foal-conformation {
+    font-style: italic;
+    font-size: 0.85rem;
+    color: var(--color-text-light);
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: var(--radius-sm);
+    padding: var(--space-xs) var(--space-sm);
+    margin: 4px 0;
+}
+
+/* Staff candidates at the Racing School */
+.staff-candidate {
+    background: var(--color-bg);
+    border: 1px solid var(--color-bg-dark);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.staff-candidate-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-xs);
+}
+
+.staff-candidate-name {
+    font-weight: 600;
+}
+
+.staff-candidate-stars {
+    color: var(--color-secondary);
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.staff-candidate-role {
+    font-size: 0.85rem;
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.staff-candidate-blurb {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-xs);
 }
 
 .next-race-preview {
@@ -3907,15 +4788,48 @@ body {
 
 .yard-tile.grass {
     background:
-        repeating-linear-gradient(75deg, transparent, transparent 3px, rgba(80,170,50,0.2) 3px, rgba(80,170,50,0.2) 4px),
-        linear-gradient(135deg, #5c9a42 0%, #4e8c36 50%, #5c9a42 100%);
+        repeating-linear-gradient(75deg, transparent, transparent 3px, rgba(80,170,50,0.15) 3px, rgba(80,170,50,0.15) 4px),
+        linear-gradient(135deg, var(--centre-grass, #5c9a42) 0%, color-mix(in srgb, var(--centre-grass, #4e8c36) 85%, black) 50%, var(--centre-grass, #5c9a42) 100%);
+}
+
+/* Grass tufts and flowers for visual variety */
+.yard-tile.grass:nth-child(7n+3)::before {
+    content: '';
+    position: absolute;
+    width: 6px; height: 8px;
+    bottom: 2px; left: 4px;
+    background: radial-gradient(ellipse, rgba(40,120,30,0.6) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.yard-tile.grass:nth-child(11n+5)::before {
+    content: '';
+    position: absolute;
+    width: 4px; height: 4px;
+    top: 6px; right: 8px;
+    border-radius: 50%;
+    background: rgba(255,220,80,0.5);
+    box-shadow: 3px 2px 0 rgba(200,100,150,0.4);
+    pointer-events: none;
+}
+
+.yard-tile.grass:nth-child(13n+7)::after {
+    content: '';
+    position: absolute;
+    width: 8px; height: 3px;
+    bottom: 8px; right: 4px;
+    background: radial-gradient(ellipse, rgba(60,140,40,0.5) 0%, transparent 70%);
+    pointer-events: none;
 }
 
 .yard-tile.path {
     background:
-        radial-gradient(ellipse 3px 2px at 30% 40%, rgba(160,140,110,0.4) 0%, transparent 100%),
-        radial-gradient(ellipse 2px 2px at 70% 60%, rgba(140,120,90,0.3) 0%, transparent 100%),
-        linear-gradient(135deg, #b8a88a 0%, #c4b496 50%, #b8a88a 100%);
+        radial-gradient(ellipse 3px 2px at 30% 40%, rgba(160,140,110,0.5) 0%, transparent 100%),
+        radial-gradient(ellipse 2px 2px at 70% 60%, rgba(140,120,90,0.4) 0%, transparent 100%),
+        radial-gradient(ellipse 2px 1px at 50% 20%, rgba(130,110,80,0.35) 0%, transparent 100%),
+        radial-gradient(ellipse 1px 2px at 15% 75%, rgba(150,130,100,0.3) 0%, transparent 100%),
+        radial-gradient(ellipse 2px 1px at 85% 35%, rgba(120,100,70,0.25) 0%, transparent 100%),
+        linear-gradient(135deg, var(--centre-path, #b8a88a) 0%, color-mix(in srgb, var(--centre-path, #c4b496) 90%, white) 50%, var(--centre-path, #b8a88a) 100%);
 }
 
 .yard-tile.cobble {
@@ -3945,11 +4859,104 @@ body {
     border: 1px dashed rgba(139,90,43,0.5);
 }
 
+/* Centre-Specific Terrain Patches */
+.terrain-patch {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.terrain-heath {
+    background:
+        radial-gradient(ellipse 8px 6px at 50% 50%, rgba(200,180,120,0.5) 0%, transparent 70%),
+        radial-gradient(ellipse 4px 3px at 30% 70%, rgba(180,160,100,0.3) 0%, transparent 70%);
+}
+
+.terrain-moor {
+    background:
+        radial-gradient(ellipse 10px 6px at 40% 50%, rgba(120,80,120,0.35) 0%, transparent 70%),
+        radial-gradient(ellipse 6px 4px at 70% 30%, rgba(100,70,100,0.25) 0%, transparent 70%);
+}
+
+.terrain-chalk {
+    background:
+        radial-gradient(ellipse 12px 8px at 50% 50%, rgba(240,240,230,0.4) 0%, transparent 70%),
+        radial-gradient(ellipse 6px 4px at 30% 70%, rgba(230,230,220,0.3) 0%, transparent 70%);
+}
+
+.terrain-river {
+    background:
+        linear-gradient(180deg, rgba(90,138,176,0.5) 0%, rgba(74,122,160,0.4) 100%);
+    border-left: 1px solid rgba(60,100,140,0.3);
+}
+
+.terrain-field {
+    background:
+        repeating-linear-gradient(0deg, transparent, transparent 4px, rgba(139,115,60,0.2) 4px, rgba(139,115,60,0.2) 5px);
+}
+
+.terrain-rock {
+    background:
+        radial-gradient(ellipse 10px 8px at 50% 60%, rgba(140,140,140,0.4) 0%, transparent 70%);
+}
+
+/* Fence Style Variants */
 .yard-tile.fence {
     background:
         repeating-linear-gradient(90deg, rgba(139,90,43,0.5) 0px, rgba(139,90,43,0.5) 1px, transparent 1px, transparent 6px),
         linear-gradient(135deg, #5c9a42 0%, #4e8c36 100%);
     border: 1px solid rgba(139,90,43,0.4);
+}
+
+/* White post-and-rail (Newmarket, Epsom) */
+.yard-tile.fence.fence-post-rail {
+    background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.8) 0px, rgba(255,255,255,0.8) 2px, transparent 2px, transparent 8px),
+        linear-gradient(135deg, var(--centre-grass, #5c9a42) 0%, color-mix(in srgb, var(--centre-grass, #4e8c36) 85%, black) 100%);
+    border: 1px solid rgba(200,200,200,0.6);
+}
+
+/* Green hedgerow (Lambourn) */
+.yard-tile.fence.fence-hedge {
+    background:
+        radial-gradient(ellipse 6px 5px at 30% 40%, #3a6a20 0%, transparent 70%),
+        radial-gradient(ellipse 5px 4px at 70% 60%, #2a5a18 0%, transparent 70%),
+        linear-gradient(135deg, #4a7a2e 0%, #3a6a20 100%);
+    border: 1px solid #2a5a18;
+}
+
+/* Dry stone wall (Middleham) */
+.yard-tile.fence.fence-stone-wall {
+    background:
+        radial-gradient(ellipse 5px 3px at 25% 30%, #a0a090 0%, transparent 70%),
+        radial-gradient(ellipse 4px 3px at 60% 65%, #909080 0%, transparent 70%),
+        radial-gradient(ellipse 3px 2px at 80% 25%, #b0b0a0 0%, transparent 70%),
+        linear-gradient(135deg, #8a8a7a 0%, #7a7a6a 100%);
+    border: 1px solid #6a6a5a;
+}
+
+/* Wooden post-and-rail with hedge (Malton) */
+.yard-tile.fence.fence-wood-hedge {
+    background:
+        repeating-linear-gradient(90deg, rgba(120,80,40,0.6) 0px, rgba(120,80,40,0.6) 2px, transparent 2px, transparent 8px),
+        radial-gradient(ellipse 8px 6px at 50% 50%, #3a6a20 0%, transparent 80%),
+        linear-gradient(135deg, var(--centre-grass, #4a8040) 0%, color-mix(in srgb, var(--centre-grass, #4a8040) 85%, black) 100%);
+    border: 1px solid rgba(100,70,30,0.5);
+}
+
+/* Building Tint Variants */
+.yard-building-2d.tint-brick {
+    filter: sepia(0.15) saturate(1.2);
+}
+
+.yard-building-2d.tint-stone {
+    filter: saturate(0.4) brightness(1.1);
+}
+
+.yard-building-2d.tint-light {
+    filter: brightness(1.15) saturate(0.8);
 }
 
 .yard-tile.paddock {
@@ -3959,54 +4966,191 @@ body {
 }
 
 .yard-tile.water {
-    background: linear-gradient(135deg, #5a8ab0 0%, #4a7aa0 50%, #5a8ab0 100%);
+    background:
+        radial-gradient(ellipse 12px 8px at 40% 35%, rgba(120,180,220,0.3) 0%, transparent 70%),
+        radial-gradient(ellipse 8px 6px at 70% 65%, rgba(100,160,200,0.25) 0%, transparent 70%),
+        linear-gradient(135deg, #5a8ab0 0%, #4a7aa0 50%, #5a8ab0 100%);
     border: 1px solid #3a6a90;
+    animation: waterRipple 4s ease-in-out infinite;
+}
+
+@keyframes waterRipple {
+    0%, 100% { background-position: 0px 0px, 0px 0px, 0px 0px; }
+    33% { background-position: 3px 2px, -2px 1px, 0px 0px; }
+    66% { background-position: -2px -1px, 3px -2px, 0px 0px; }
 }
 
 /* Building footprints (top-down) */
 .yard-building-2d {
     position: absolute;
     border: 2px solid rgba(0,0,0,0.3);
-    border-radius: 2px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 5;
-    box-shadow: 2px 2px 6px rgba(0,0,0,0.25);
+    box-shadow: 3px 4px 10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+    overflow: hidden;
+}
+
+/* Roof ridge effect (darker band at top) */
+.yard-building-2d::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 30%;
+    background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Door/window detail (bottom center) */
+.yard-building-2d::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 16px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 2px 2px 0 0;
+    box-shadow: -18px -4px 0 4px rgba(255,255,255,0.12), 18px -4px 0 4px rgba(255,255,255,0.12);
+    pointer-events: none;
+    z-index: 1;
 }
 
 .yard-building-2d.barn {
-    background: linear-gradient(135deg, #8b5e3c, #7a4e2e);
+    background: linear-gradient(180deg, #6b3e1c 0%, #8b5e3c 30%, #7a4e2e 100%);
 }
 .yard-building-2d.feed-mill {
-    background: linear-gradient(135deg, #7a7060, #6e6454);
+    background: linear-gradient(180deg, #5a5040 0%, #7a7060 30%, #6e6454 100%);
 }
 .yard-building-2d.tack-store {
-    background: linear-gradient(135deg, #7a6650, #6e5a44);
+    background: linear-gradient(180deg, #5a4630 0%, #7a6650 30%, #6e5a44 100%);
 }
 .yard-building-2d.tattersalls {
-    background: linear-gradient(135deg, #8b7a6a, #7a695a);
+    background: linear-gradient(180deg, #6b5a4a 0%, #8b7a6a 30%, #7a695a 100%);
 }
 .yard-building-2d.racecourse {
-    background: linear-gradient(135deg, #6a8a4a, #5a7a3a);
+    background: linear-gradient(180deg, #4a6a2a 0%, #6a8a4a 30%, #5a7a3a 100%);
 }
 .yard-building-2d.gallops-bldg {
-    background: linear-gradient(135deg, #a08060, #8a7050);
+    background: linear-gradient(180deg, #806040 0%, #a08060 30%, #8a7050 100%);
 }
 .yard-building-2d.forage {
-    background: linear-gradient(135deg, #8a9a60, #7a8a50);
+    background: linear-gradient(180deg, #6a7a40 0%, #8a9a60 30%, #7a8a50 100%);
 }
 .yard-building-2d.supplier {
-    background: linear-gradient(135deg, #6a7a8a, #5a6a7a);
+    background: linear-gradient(180deg, #4a5a6a 0%, #6a7a8a 30%, #5a6a7a 100%);
 }
 .yard-building-2d.trainer-house {
-    background: linear-gradient(135deg, #a07860, #8a6850);
+    background: linear-gradient(180deg, #805840 0%, #a07860 30%, #8a6850 100%);
 }
 .yard-building-2d.vet {
-    background: linear-gradient(135deg, #f0f0f0, #d0d0d0);
+    background: linear-gradient(180deg, #d0d0d0 0%, #f0f0f0 30%, #e0e0e0 100%);
 }
 .yard-building-2d.mechanics {
-    background: linear-gradient(135deg, #6a6a6a, #5a5a5a);
+    background: linear-gradient(180deg, #4a4a4a 0%, #6a6a6a 30%, #5a5a5a 100%);
+}
+.yard-building-2d.racing-school {
+    background: linear-gradient(180deg, #6b2503 0%, #8b4513 30%, #a0522d 100%);
+}
+
+/* Staff NPC */
+.staff-npc {
+    pointer-events: none;
+}
+
+.staff-npc-label {
+    pointer-events: none;
+}
+
+@keyframes staffStatPopup {
+    0% { opacity: 0; transform: translateX(-50%) translateY(0); }
+    15% { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+    75% { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-16px); }
+}
+
+/* Barn Status Board */
+.barn-status-board {
+    position: fixed;
+    top: 60px;
+    right: 8px;
+    width: 260px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    background: rgba(30, 25, 18, 0.92);
+    border: 1px solid rgba(160, 140, 100, 0.4);
+    border-radius: 6px;
+    padding: 8px;
+    z-index: 80;
+    font-size: 11px;
+    color: #e0d8c8;
+    pointer-events: none;
+}
+
+.barn-status-board h4 {
+    margin: 0 0 6px 0;
+    font-size: 12px;
+    color: #c4a265;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(160, 140, 100, 0.3);
+    padding-bottom: 4px;
+}
+
+.barn-horse-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(100, 90, 70, 0.2);
+}
+
+.barn-horse-row:last-child {
+    border-bottom: none;
+}
+
+.barn-horse-name {
+    flex: 0 0 70px;
+    font-weight: 600;
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.barn-stat-icons {
+    display: flex;
+    gap: 3px;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.barn-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    font-size: 9px;
+    padding: 1px 3px;
+    border-radius: 3px;
+}
+
+.barn-stat-icon.stat-ok {
+    color: #6a8a5a;
+}
+
+.barn-stat-icon.stat-warn {
+    color: #c4a040;
+    background: rgba(196, 160, 64, 0.1);
+}
+
+.barn-stat-icon.stat-danger {
+    color: #c44040;
+    background: rgba(196, 64, 64, 0.15);
+    font-weight: 700;
 }
 
 /* Building label */
@@ -4053,6 +5197,26 @@ body {
     transition: left 0.12s ease-out, top 0.12s ease-out;
     filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
     pointer-events: none;
+}
+
+.yard-player.car-mode {
+    width: 36px;
+    height: 24px;
+}
+
+.yard-player.car-mode .player-svg {
+    display: none;
+}
+
+.yard-player.car-mode::before {
+    content: '';
+    position: absolute;
+    width: 36px;
+    height: 24px;
+    background: linear-gradient(180deg, #4a6a9a 0%, #3a5a8a 100%);
+    border-radius: 6px 6px 3px 3px;
+    border: 1px solid #2a4a7a;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
 }
 
 .yard-player.lorry-mode {
@@ -4316,4 +5480,211 @@ body {
     z-index: 55;
     pointer-events: none;
     white-space: nowrap;
+}
+
+/* ===== Rating Band Badges ===== */
+.rating-band-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #4a90d9, #2c5f9e);
+    color: #fff;
+    letter-spacing: 0.5px;
+    margin-left: 4px;
+}
+
+/* ===== Raceday Calendar ===== */
+.raceday-header {
+    text-align: center;
+    padding: var(--space-md) 0;
+    border-bottom: 2px solid var(--color-bg-dark);
+    margin-bottom: var(--space-md);
+}
+
+.raceday-header h3 {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--color-primary);
+    margin: 0;
+}
+
+.raceday-subtitle {
+    color: var(--color-text-light);
+    margin-top: var(--space-xs);
+    font-size: 0.9rem;
+}
+
+.race-card-eligible {
+    font-size: 0.8rem;
+    margin-top: 2px;
+}
+
+.race-card-eligible.eligible {
+    color: var(--color-success);
+    font-weight: 600;
+}
+
+.race-card-eligible.ineligible {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.race-card.entered {
+    border-left: 4px solid var(--color-success);
+    background: rgba(40, 167, 69, 0.05);
+}
+
+.race-card.entered .race-card-status {
+    color: var(--color-success);
+    font-weight: 700;
+}
+
+.raceday-actions {
+    text-align: center;
+    padding: var(--space-lg) 0;
+}
+
+.raceday-hint {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    margin-top: var(--space-sm);
+}
+
+/* ===== Raceday Results ===== */
+.raceday-result-card {
+    background: var(--color-card);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-sm);
+    border-left: 4px solid var(--color-bg-dark);
+    box-shadow: var(--shadow-sm);
+}
+
+.raceday-result-card.race-result-placed {
+    border-left-color: var(--color-secondary);
+    background: rgba(201, 162, 39, 0.04);
+}
+
+.raceday-result-card.race-result-ran {
+    border-left-color: var(--color-primary);
+}
+
+.raceday-result-card.race-result-norunner {
+    opacity: 0.7;
+}
+
+.raceday-result-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-xs);
+    flex-wrap: wrap;
+}
+
+.raceday-result-header .race-number {
+    background: var(--color-primary);
+    color: #fff;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.raceday-result-header .race-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.raceday-result-header .race-distance {
+    color: var(--color-text-light);
+    font-size: 0.85rem;
+}
+
+.raceday-result-places {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: var(--space-xs) 0;
+    padding-left: 32px;
+}
+
+.result-place {
+    font-size: 0.85rem;
+    color: var(--color-text-light);
+}
+
+.result-place.player-result {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.result-place.void {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.player-race-result {
+    font-size: 0.85rem;
+    padding-left: 32px;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin-top: var(--space-xs);
+}
+
+.player-race-result.no-runner {
+    color: var(--color-text-muted);
+    font-weight: 400;
+    font-style: italic;
+}
+
+/* ===== Form Guide ===== */
+.form-guide {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.form-entry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 4px 8px;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+}
+
+.form-pos {
+    font-weight: 700;
+    min-width: 28px;
+    text-align: center;
+}
+
+.form-pos.placed {
+    color: var(--color-success);
+}
+
+.form-race {
+    flex: 1;
+    font-weight: 500;
+}
+
+.form-dist,
+.form-or,
+.form-field {
+    color: var(--color-text-light);
+    font-size: 0.75rem;
+}
+
+.form-empty {
+    color: var(--color-text-muted);
+    font-style: italic;
+    font-size: 0.85rem;
 }
